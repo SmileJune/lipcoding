@@ -125,13 +125,23 @@
 - **Q**: 필요한 MCP 가 있으면 언제든 설치 후 사용해.
 - **A / 결정**: MCP·도구를 **자율 설치·사용** 허용(매번 확인 불필요). `.github/copilot-instructions.md` 작업자 제약에 반영. 현재 연결됨: Azure · GitHub · Microsoft Learn · Playwright(E2E). 새 도구가 필요해지면 설치 후 결과만 보고.
 
+### 20. 프론트엔드(화면) 구현 + 테스트 (2026-06-20)
+- **Q**: 화면 먼저 만들어줘.
+- **A / 결과**:
+  - 프론트엔드 `web/`(React+TS+Vite) 구현 — 사이드바(보드·AI도우미·Copilot 배지), 링크 입력→카드 생성, `@dnd-kit` 드래그 보드, 카드(요약·핵심·태그·메모·색상·삭제), AI 정리/Q&A 패널.
+  - API 클라이언트(상대경로 /api, dev 프록시), 데이터 모델 백엔드와 일치.
+  - 테스트: **Vitest 18개 통과**(api·dnd·LinkInput·CardItem·App 통합[Testing Library]). 타입체크 + 프로덕션 빌드 통과.
+  - **브라우저 E2E 확인**(Playwright): 링크 입력→실제 Copilot LIVE 요약 카드 렌더까지 시각 확인.
+  - 커밋: 기능 단위 4개(chore/feat). 임시 스크린샷·.playwright-mcp 는 gitignore.
+- **다음 단계**: Azure 배포(`azd`: SWA+Functions+Cosmos), Cosmos 영속화, Playwright 자동화 E2E 보강.
+
 ---
 
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨 · `gh` 로그인(SmileJune) · `.env` 준비 · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 Vitest **57개 통과** + 타입체크 통과 (Playwright E2E는 프론트 이후)
-- **코드**: `api/openapi.yaml`(명세) · 백엔드 구현(`api/src`, 9 엔드포인트) · 기능단위 커밋 7개
-- **다음 단계**: 프론트엔드(React+TS+Vite) 스캐폴드 또는 Azure 배포 준비(`azd`)
+- **테스트**: ✅ 백엔드 57 + 프론트 18 = **75개 통과** · 타입체크·빌드 통과 (Playwright 수동 E2E 확인됨)
+- **코드**: 백엔드 `api/`(9 엔드포인트) + 프론트 `web/`(React 보드 UI) · 기능단위 커밋 15개
+- **다음 단계**: Azure 배포(`azd`: SWA+Functions+Cosmos) 또는 Cosmos DB 영속화
 
