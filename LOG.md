@@ -286,6 +286,17 @@
   - **문서**: README·PROJECT 의 SDK 표기를 `@github/copilot-sdk`(세션·도구·스트리밍)로 갱신.
   - **커밋 범위**: 본 개선(코드·테스트·의존성·문서)만 선별 커밋. 무관한 썬네일 referrer 수정(CardItem/SharedBoard)·임시 스모크 파일은 제외.
 
+### 34. AI 모델 레이어를 Azure 로 — Azure OpenAI(Foundry) 인프라 추가 (2026-06-20)
+- **Q**: 외부 평가가 "Azure 관리 서비스 통합(App Service·Cosmos·App Insights·Bicep·관리 ID RBAC)은 확인되나, 4~5점에 필요한 Azure OpenAI/AI Foundry 기반 AI 레이어가 없고 AI 가 GitHub Copilot SDK(`GITHUB_TOKEN`)로 동작 → 'AI 가 Azure 가 아닌 관리형 Azure 배포' 로 3점" 으로 지적. 개선 후 해당 내용만 커밋·푸시 요청.
+- **A / 결정**:
+  - 진단: `ai.ts` 는 이미 `azure` provider(BYOM, 관리 ID 베어러 토큰)를 지원하나 **Bicep 에 Azure OpenAI 리소스가 없어** App Service 에 `AZURE_OPENAI_ENDPOINT` 가 주입되지 않아 항상 `github` 경로로만 동작 → 실제 AI 추론이 Azure 밖에서 일어남.
+  - **IaC 추가**(`infra/modules/resources.bicep`): `Microsoft.CognitiveServices/accounts`(kind `OpenAI`, S0, 커스텀 서브도메인, **`disableLocalAuth:true` 키리스**) + 모델 배포(`gpt-4o-mini`, GlobalStandard 30K TPM).
+  - **키리스 RBAC**: App Service 관리 ID → **Cognitive Services OpenAI User**(`5e0bd9bd…`) 역할 부여 → Entra 토큰으로만 추론(API 키 없음).
+  - **앱 연결**: appSettings `AZURE_OPENAI_ENDPOINT`/`AZURE_OPENAI_DEPLOYMENT`/`AZURE_OPENAI_API_VERSION` 주입 → 런타임 `aiProvider()` 가 자동으로 `azure` 선택(요약·정리·Q&A 가 Azure OpenAI 로 실행). 실패 시 Copilot SDK → 데모 3단 폴백 유지.
+  - `infra/main.bicep` 파라미터·출력(`AZURE_OPENAI_ENDPOINT`/`DEPLOYMENT`) 연결, `.env.example` 에 Azure OpenAI 섹션 추가.
+  - 검증: `az bicep build` 경고 0·에러 0. 백엔드 테스트 통과(`aiProvider` azure 감지 기존 테스트 유지). 배포는 별도 `azd up`(Azure OpenAI 쿼터 필요).
+  - **커밋 범위**: 본 개선(인프라 Bicep·`.env.example`·로그)만 선별 커밋. 동시에 진행 중이던 무관한 "Insight/synthesize" 기능 작업(ai.ts/types/openapi/app/web 등)은 작업 트리에 그대로 두고 제외.
+
 ---
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
