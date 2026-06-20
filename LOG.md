@@ -155,6 +155,16 @@
   - 비용: 데모 수준 거의 무료(SWA Free·Functions Consumption 무료한도·Cosmos Serverless 소액).
 - **다음 단계**: azd 스캐폴드(azure.yaml + infra Bicep) → 검증 → `azd up`.
 
+### 23. Telegram 완료 알림 설정 (2026-06-20)
+- **Q**: `~/programming` 의 텔레그램 관련 env 파일을 찾고, 작업 완료 시 텔레그램 메시지를 보내도록 설정.
+- **A / 결과**:
+  - 기존 컨벤션 발견: 여러 프로젝트의 `.env.codex-notify`(TELEGRAM_BOT_TOKEN/CHAT_ID) + `scripts/codex-notify.mjs`.
+  - 동일 패턴 복제: `scripts/codex-notify.mjs`(PROJECT_NAME=curio) + `scripts/test-codex-notify.js` + `.env.codex-notify.example`.
+  - 시크릿은 기존 프로젝트에서 **출력 없이 복사**, `.env.codex-notify` gitignore 처리(미커밋 확인).
+  - 검증: 테스트 **3/3 통과**, **실제 텔레그램 전송 성공**.
+  - 표준화: `.github/copilot-instructions.md` 에 "완료 알림" 규칙 추가 + 메모리 기록.
+- **사용법**: `node scripts/codex-notify.mjs done "<요약>"` (실패 시 `failed`).
+
 ---
 
 ## 현재 상태 (스냅샷)
