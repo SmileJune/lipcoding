@@ -244,6 +244,35 @@
   - **검증(LIVE)**: `/api/health` 200 `copilotMode:live`. 공개 공유 조회 `GET /api/shared/<id>` 200(보드명 + Copilot 라이브 요약 카드 반환, 메모/이메일 등 민감정보 미노출), 조회 직후 health 200 → **크래시 재발 없음**.
   - **교훈**: 프로덕션 Node App Service 는 반드시 컴파일된 `node dist/server.js` 로 기동. `tsx`/dev `npm start` 금지. azd provision "Skipped" 면 siteConfig(appCommandLine) 가 라이브에 안 닿을 수 있으니 `az webapp config show --query startupCommand` 로 확인.
 
+### 30. 배포 사이트에서 카드 썸네일이 안 보이는 문제 (2026-06-20)
+- **Q**: 썸네일 이미지는 잘 가지고 있는데 해당 링크를 카드에 표현하지 못하는 것 같다, 확인해줘.
+- **A / 결정**:
+  - **증상**: 배포 사이트(app-curio-osnoy7)에서 모든 카드의 썸네일이 표시되지 않음.
+  - **진단**: 추출(extract)·저장(store)·API응답·프론트 렌더 코드는 전부 정상. 로컬 단일서버 E2E 로 Wikipedia 썸네일이 1280×850 으로 `display:block` 렌더됨을 스크린샷 확인. 배포 백엔드도 imageUrl 정상 추출(Wikipedia/MDN curl). CSP·mixed content 아님(배포 referrer 로 wikimedia/MDN 이미지 `ok` 로드).
+  - **원인 확정**: **referrer 기반 hotlink 차단**. 배포 referrer 로 `regexr.com/assets/card.png` 로드 시 `error/blocked`, `no-referrer` 시 `ok 1200×630`. 브라우저가 이미지 로드 시 `Referer` 를 자동 전송 → 원본 서버가 외부 도메인 referrer 를 거부 → `onError` 로 `display:none` 처리되어 카드에서 사라짐.
+  - **수정**: `CardItem.tsx`·`SharedBoard.tsx` 썸네일 `<img>` 에 `referrerPolicy="no-referrer"` 추가. 회귀 테스트 2개 추가(`getAttribute('referrerpolicy')==='no-referrer'`; JSDOM 은 IDL 프로퍼티 미reflect 라 getAttribute 사용). 프론트 **39개** 통과, tsc+빌드 OK.
+  - **부수 발견**: 진단 중 배포 `from-url` 첫 curl 이 빈 응답이었으나 B1 **콜드스타트** 탓(웜업 후 201 정상). 배포본은 구버전 번들(`C_8ZRNyA`)이라 재배포 필요.
+  - **배포 완료**: `azd deploy` 로 배포. 단, **azd deploy 는 root `azure.yaml` 의 prepackage 훅(web 재빌드→api/public 복사)을 실행하지 않아** 첫 배포는 구버전 번들(`BVOFoTjt`)이 그대로 올라감. 해결: 수동으로 `rm -rf api/public && cp -r web/dist api/public` 후 `azd deploy` → live 번들 `B0Mhn9lr`(no-referrer 포함) 확인. 교훈: azd deploy 전에 api/public 을 직접 갱신하거나 `azd package`/`azd up` 을 써야 훅이 실행됨.
+
+### 31. README 작성 (2026-06-20)
+- **Q**: 해당 프로젝트에 주요 기능과 개요를 리드미 파일을 작성해줘.
+- **A / 결정**:
+  - 루트에 `README.md` 신규 작성. PROJECT.md(설계 기준 문서)와 중복을 피하고, 프로젝트 **진입점**(개요·주요 기능·빠른 시작·구조·배포)에 집중.
+  - 구성: 한 줄 소개 + 라이브 데모 링크(app-curio-osnoy7) → 핵심 가치(북마크 대비 차별점 표) → 주요 기능(11개) → 기술 스택 → 빠른 시작(api 7071 / web 5173) → 환경 변수 표 → 테스트 명령 → API 개요 표 → 프로젝트 구조 → Azure 배포(`azd up`) → 보안 → 문서 링크(PROJECT.md·LOG.md).
+  - 실제 코드 기준 반영: `package.json` 스크립트(dev/test/build), `app.ts` 라우트 경로(공유·인증·organize 포함), `.env.example` 변수, `server.ts` 포트(7071), `azure.yaml`(단일 App Service + prepackage 훅).
+
+### 32. GitHub OAuth 라이브 로그인 활성화 (2026-06-20)
+- **Q**: 로그인 기능 진행 상황 확인 → 라이브 OAuth 활성화 요청("해주세요").
+- **A / 결정**:
+  - 코드·테스트·배포는 이미 완료 상태였고, 프로덕션만 데모 모드(OAuth env 미설정)였음. 라이브 스위치만 켜는 작업.
+  - 인프라 점검: `infra/main.bicep`·`resources.bicep`·`main.parameters.json` 이 이미 OAuth 3개 변수(GITHUB_OAUTH_CLIENT_ID/SECRET·SESSION_SECRET)를 App Service appSettings 로 매핑 → 수정 불필요. `az bicep build` 통과.
+  - `SESSION_SECRET` = `openssl rand -hex 32`(64자) 자동 생성 후 `azd env set`.
+  - GitHub OAuth 앱은 GitHub 이 생성 API 미제공 → 브라우저 수동 등록(`open` 으로 등록 페이지 자동 오픈). 콜백 `https://app-curio-osnoy7.azurewebsites.net/api/auth/callback`.
+  - 헬퍼 스크립트 `scripts/enable-github-oauth.sh` 작성: Client ID/Secret 을 `read -s`(시크릿 비표시)로 받아 `azd env set` + `azd provision`.
+  - `azd provision` SUCCESS(1m20s) → appSettings 3개 Set=True 확인 → 재시작 후 `authMode:"live"` 전환 확인. `/api/auth/login` 이 `github.com/login/oauth/authorize?client_id=...` 로 302 정상.
+  - **교훈**: ① `azd provision` 은 `tool.firstRunCompleted` 미설정 시 "개발도구 설치" 대화형 프롬프트에서 멈춤 → `azd config set tool.firstRunCompleted true`(또는 `AZD_SKIP_FIRST_RUN=true`) + `--no-prompt` 로 비대화형화. ② appSettings 변경 후 B1 재시작 반영에 1~2분 소요(즉시 확인 시 이전 인스턴스가 demo 응답).
+  - **보안**: Client Secret 이 채팅에 노출됨 → GitHub 에서 재발급(rotate) 권장. `.env` 는 표준 변수명(GITHUB_OAUTH_CLIENT_ID/SECRET)으로 정리, gitignore 유지.
+
 ---
 
 ## 현재 상태 (스냅샷)
@@ -252,5 +281,5 @@
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
 - **테스트**: ✅ 백엔드 91 + 프론트 37 = **128개 통과** · 타입체크·빌드·azd preview/package 통과
 - **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
-- **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 보드 공유 기능 배포됨. startup 커맨드 `node dist/server.js` 명시(tsx 크래시 루프 수정). 데모 모드 동작. GitHub OAuth 활성화는 사용자 OAuth 앱 등록 + `azd env set` 후 재배포.
+- **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 보드 공유 기능 배포됨. startup 커맨드 `node dist/server.js` 명시(tsx 크래시 루프 수정). **GitHub OAuth 라이브 로그인 활성화됨**(authMode=live, `/api/auth/login` → github.com 302 정상).
 
