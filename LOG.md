@@ -212,13 +212,35 @@
   - **테스트**: 백엔드 service·store·app(supertest) 공유 경로 추가 → **91개**, 프론트 api·App·신규 `SharedBoard` → **32개**, 합계 **123개 통과**. OpenAPI(redocly) 유효.
   - **E2E 시연**: 단일 서버(api/public)에서 카드 추가 → 공유 링크 발급 → `?share=` 읽기 전용 뷰 정상 확인(스크린샷). dev 프록시(5173→7071)는 동일 출처 CSRF 방어에 걸리므로 시연은 단일 출처로 진행.
 
+### 28. Azure 실제 배포 — 빌드/런타임/시드 문제 해결 (2026-06-20)
+- **Q**: GitHub OAuth 인증 + 공유 기능을 포함해 Azure 에 실제 배포(`azd up`)하고 동작 확인.
+- **A / 결과**:
+  - **빌드 실패 진단·수정**: Oryx 원격 빌드에서 `sh: 1: tsc: not found`. 원인 = 앱 설정 `NODE_ENV=production` 이 `npm install` 의 devDependencies(typescript) 설치를 건너뜀. `NPM_CONFIG_PRODUCTION=false` 로는 해결 안 됨(NODE_ENV 우선). **`NODE_ENV=production` 앱 설정 제거**로 해결 → 서버에서 tsc 컴파일 성공. (프로덕션 감지는 코드에서 `WEBSITE_SITE_NAME` 사용, NODE_ENV 의존 없음.)
+  - **런타임 콜드 스타트**: 첫 컨테이너 기동이 230s 제한 초과(ContainerTimeout)했으나 재시도에서 warmup 프로브 69s 만에 성공·`Site started`. azd 는 20분 대기 타임아웃으로 먼저 종료됐지만 **실배포는 성공**. (alwaysOn 으로 이후 웜 유지.)
+  - **기본 보드 시드 버그 수정**: `cosmos-store.ensureUserSeed` 가 `item().read()` 의 404 throw 에만 의존 → 일부 SDK 동작에서 404 시 throw 대신 `resource: undefined` 반환하여 upsert 분기를 건너뜀(기본 "전체" 보드 미생성). `Boolean(resource)` 로 존재 여부를 명시 확인 후 upsert 하도록 수정. 재배포.
+  - **동작 확인(LIVE)**: `https://app-curio-osnoy7.azurewebsites.net`
+    - `/api/health` → 200 `{"status":"ok","copilotMode":"live","authMode":"demo","version":"0.1.0"}`
+    - `/` SPA → 200 · `/api/boards` → 200(Cosmos 키리스 RBAC 읽기/쓰기 정상) · `/api/auth/me` → 데모 사용자
+  - **인증 모드**: OAuth env(`GITHUB_OAUTH_CLIENT_ID/SECRET`·`SESSION_SECRET`) 미설정 → 배포본은 **데모 모드**(로그인 없이 즉시 사용). 실제 GitHub 로그인 활성화는 사용자가 GitHub OAuth 앱 등록(콜백 `https://app-curio-osnoy7.azurewebsites.net/api/auth/callback`) 후 `azd env set` 3개 + 재배포로 전환.
+  - **교훈**: Oryx devDep 설치는 `NODE_ENV=production` 으로 차단되며 `NPM_CONFIG_PRODUCTION` 으로 못 덮음 → 제거가 정답. Cosmos `item().read()` 의 404 처리는 throw/undefined 양쪽 모두 대비.
+
+### 29. 카드 생성 로딩 UX — 스켈레톤 아웃라인 (2026-06-20)
+- **Q**: 카드를 생성할 때 생성 중임을 알 수 있도록 카드 아웃라인을 미리 그려주고, 로딩 중임을 알 수 있는 UI/UX 를 구성해줘.
+- **A / 결정**:
+  - **낙관적 자리표시(스켈레톤)**: 링크 제출 즉시 보드에 "생성 중" 카드 아웃라인을 그리고, 서버 응답이 오면 실제 카드로 교체. 여러 링크 동시 생성을 위해 `PendingCard[]`(임시 id+url) 배열로 관리.
+  - **신규 컴포넌트** `CardSkeleton.tsx`: 점선 테두리 카드 + 좌상단 스피너 + "요약 생성 중…" + shimmer 썸네일/3줄 텍스트/태그 자리 + 처리 중 URL 표시. `role=status`·`aria-busy`·`aria-label` 접근성.
+  - **App/Board 연결**: `App.addCard` 가 setBusy 대신 pending 추가/제거(성공·실패 모두 finally 에서 제거), `LinkInput busy={pending.length>0}`(버튼 "카드 생성 중…" 비활성), `Board` 가 cards 뒤에 pending 스켈레톤을 좌상단 살짝 오프셋 배치, empty 문구는 cards·pending 모두 0 일 때만.
+  - **CSS**: shimmer keyframes(`background-position` 이동) + 스피너 회전 + `prefers-reduced-motion` 시 애니메이션 정지(접근성).
+  - **테스트**: 신규 `CardSkeleton.test.tsx`(3) + `App.test.tsx` 에 지연 Promise 로 생성 중 스켈레톤 표시→완료 시 실제 카드 교체, 실패 시 스켈레톤 제거+에러 토스트(2) 추가 → 프론트 **37개**(기존 32+5) 통과, tsc strict+빌드 OK.
+  - **시각 시연**(Playwright route mock, 응답 4s 지연): 스켈레톤(점선 아웃라인·스피너·shimmer·URL·버튼 "카드 생성 중…") 표시 후 실제 카드로 교체·버튼 복귀 스크린샷 확인.
+
 ---
 
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준), `.azure/deployment-plan.md`(배포 계획·검증)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 91 + 프론트 32 = **123개 통과** · 타입체크·빌드·azd preview/package 통과
+- **테스트**: ✅ 백엔드 91 + 프론트 37 = **128개 통과** · 타입체크·빌드·azd preview/package 통과
 - **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
-- **배포 상태**: 계획서 **Validated** — `azd up` 만 남음(사용자 승인 대기)
+- **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 데모 모드 동작. GitHub OAuth 활성화는 사용자 OAuth 앱 등록 + `azd env set` 후 재배포.
 
