@@ -135,13 +135,24 @@
   - 커밋: 기능 단위 4개(chore/feat). 임시 스크린샷·.playwright-mcp 는 gitignore.
 - **다음 단계**: Azure 배포(`azd`: SWA+Functions+Cosmos), Cosmos 영속화, Playwright 자동화 E2E 보강.
 
+### 21. 카드 대표 이미지(썸네일) 추가 (2026-06-20)
+- **Q**: 카드 생성 시 이미지도 가져와야 함. 어떤 메타 태그를 가장 많이 쓰는지 확인하고 구현.
+- **A / 결과**:
+  - 가장 널리 쓰이는 표준은 **og:image**(Open Graph), 다음이 **twitter:image**(Twitter Card).
+  - 백엔드 `extract.ts`: `og:image → twitter:image → link[rel=image_src]` 순 탐색, 상대경로 절대화, http/https만 허용. `Article.imageUrl` 반환→카드 저장.
+  - 프론트 `CardItem`: 썸네일 렌더(onError 시 숨김) + 스타일.
+  - 테스트: 백엔드 +3(og/twitter/null), 프론트 +2 → 백엔드 60·프론트 20 전부 통과. 타입체크·빌드 통과.
+  - 실제 검증: Wikipedia 페이지에서 og:image 절대 URL 추출 확인.
+  - `imageUrl` 2차 예약 → **MVP 기능**으로 승격(PROJECT.md 반영).
+- **다음 단계**: Azure 배포 또는 Cosmos 영속화.
+
 ---
 
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨 · `gh` 로그인(SmileJune) · `.env` 준비 · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 57 + 프론트 18 = **75개 통과** · 타입체크·빌드 통과 (Playwright 수동 E2E 확인됨)
-- **코드**: 백엔드 `api/`(9 엔드포인트) + 프론트 `web/`(React 보드 UI) · 기능단위 커밋 15개
+- **테스트**: ✅ 백엔드 60 + 프론트 20 = **80개 통과** · 타입체크·빌드 통과
+- **코드**: 백엔드 `api/`(9 엔드포인트 + og:image 썸네일) + 프론트 `web/`(보드 UI + 썸네일) · 기능단위 커밋 18+개
 - **다음 단계**: Azure 배포(`azd`: SWA+Functions+Cosmos) 또는 Cosmos DB 영속화
 
