@@ -110,13 +110,24 @@
   - 검증: `npx @redocly/cli lint` → **valid 🎉 (exit 0, 경고 4건 비차단)**.
 - **결정**: 다음은 백엔드 스캐폴드(명세 기반 Functions + 인메모리 스토어 + 헬스/카드 API + Vitest 테스트).
 
+### 18. 핵심 기능(백엔드) 구현 + 테스트 + 커밋 (2026-06-20)
+- **Q**: 핵심 기능 구현 + 테스트까지 + 구현 후 기능단위 커밋.
+- **A / 결과**:
+  - 백엔드(`api/`, TypeScript ESM) 구현 — 모듈: `types`·`store`(인메모리)·`ssrf`·`extract`(readability+jsdom)·`ai`(Copilot 요약/정리/Q&A + 데모 폴백)·`service`·`app`(Express)·`server`.
+  - 9개 엔드포인트 전부 구현(명세 일치): health, cards/from-url, cards CRUD, boards, organize, chat.
+  - 테스트: **Vitest 57개 전부 통과** (6파일: ssrf·store·ai·extract·service·app[supertest]). 데모 폴백·SSRF·검증 경로 포함.
+  - 품질: `tsc --strict` 타입체크 통과(에러 0).
+  - 스모크: 실서버 부팅(copilot:live), 실제 URL→**LIVE 한국어 요약 카드** 생성 확인.
+  - 커밋: 기능 단위 7개(chore/docs/feat). `.env`·OpenAI 키 미커밋 검증 완료.
+- **다음 단계**: 프론트엔드(React+TS+Vite) — 링크 입력→카드→드래그앤드롭 보드, 또는 Azure 배포 준비.
+
 ---
 
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨 · `gh` 로그인(SmileJune) · `.env` 준비 · **Copilot SDK LIVE 확인**
-- **테스트**: Vitest + Playwright (코드 작성 시 동반 필수)
-- **코드**: `api/openapi.yaml`(API 명세, 검증됨) · `redocly.yaml`(린트 설정)
-- **다음 단계**: 백엔드 스캐폴드 — 명세 기반 Azure Functions + 인메모리 스토어 + Vitest 테스트
+- **테스트**: ✅ 백엔드 Vitest **57개 통과** + 타입체크 통과 (Playwright E2E는 프론트 이후)
+- **코드**: `api/openapi.yaml`(명세) · 백엔드 구현(`api/src`, 9 엔드포인트) · 기능단위 커밋 7개
+- **다음 단계**: 프론트엔드(React+TS+Vite) 스캐폴드 또는 Azure 배포 준비(`azd`)
 
