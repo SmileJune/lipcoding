@@ -121,6 +121,10 @@
   - 커밋: 기능 단위 7개(chore/docs/feat). `.env`·OpenAI 키 미커밋 검증 완료.
 - **다음 단계**: 프론트엔드(React+TS+Vite) — 링크 입력→카드→드래그앤드롭 보드, 또는 Azure 배포 준비.
 
+### 19. MCP 자율 설치·사용 허용 (2026-06-20)
+- **Q**: 필요한 MCP 가 있으면 언제든 설치 후 사용해.
+- **A / 결정**: MCP·도구를 **자율 설치·사용** 허용(매번 확인 불필요). `.github/copilot-instructions.md` 작업자 제약에 반영. 현재 연결됨: Azure · GitHub · Microsoft Learn · Playwright(E2E). 새 도구가 필요해지면 설치 후 결과만 보고.
+
 ---
 
 ## 현재 상태 (스냅샷)
