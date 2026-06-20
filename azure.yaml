@@ -1,0 +1,20 @@
+name: curio
+metadata:
+  template: curio@0.1.0
+
+# Bicep(기본 IaC). 단일 App Service(Express)가 API + 빌드된 React SPA 를 함께 서빙.
+services:
+  curio:
+    project: ./api
+    language: ts
+    host: appservice
+
+# 패키징 전: 프론트(web) 빌드 → api/public 으로 복사(App Service 가 정적 서빙)
+hooks:
+  prepackage:
+    posix:
+      shell: sh
+      run: npm --prefix web ci && npm --prefix web run build && rm -rf api/public && cp -r web/dist api/public
+    windows:
+      shell: pwsh
+      run: npm --prefix web ci; npm --prefix web run build; if (Test-Path api/public) { Remove-Item -Recurse -Force api/public }; Copy-Item -Recurse web/dist api/public
