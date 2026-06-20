@@ -146,6 +146,15 @@
   - `imageUrl` 2차 예약 → **MVP 기능**으로 승격(PROJECT.md 반영).
 - **다음 단계**: Azure 배포 또는 Cosmos 영속화.
 
+### 22. Azure 배포 계획 — 리소스 정리 + IaC 선택 (2026-06-20)
+- **Q**: Azure 처음 사용. 어떤 리소스가 필요한지 정리하고 Terraform 사용 필요 여부도 확인.
+- **A / 결정**:
+  - 권장 구성: **Static Web Apps(프론트) + Azure Functions(백엔드 API, Consumption) + Cosmos DB(Serverless NoSQL)** + (선택) Key Vault(GITHUB_TOKEN)·App Insights. Resource Group 1개.
+  - 코드 작업 1가지: Express → Azure Functions 어댑터(service.ts 분리돼 소규모) 또는 Container Apps 컨테이너화.
+  - **IaC: azd + Bicep 권장, Terraform 불필요.** 초보 친화·`azd up` 단일 명령·MS 네이티브·계획 일치. Terraform은 멀티클라우드/조직표준 시에만.
+  - 비용: 데모 수준 거의 무료(SWA Free·Functions Consumption 무료한도·Cosmos Serverless 소액).
+- **다음 단계**: azd 스캐폴드(azure.yaml + infra Bicep) → 검증 → `azd up`.
+
 ---
 
 ## 현재 상태 (스냅샷)
@@ -154,5 +163,5 @@
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨 · `gh` 로그인(SmileJune) · `.env` 준비 · **Copilot SDK LIVE 확인**
 - **테스트**: ✅ 백엔드 60 + 프론트 20 = **80개 통과** · 타입체크·빌드 통과
 - **코드**: 백엔드 `api/`(9 엔드포인트 + og:image 썸네일) + 프론트 `web/`(보드 UI + 썸네일) · 기능단위 커밋 18+개
-- **다음 단계**: Azure 배포(`azd`: SWA+Functions+Cosmos) 또는 Cosmos DB 영속화
+- **다음 단계**: Azure 배포 — azd+Bicep 으로 SWA+Functions+Cosmos 스캐폴드(리소스 계획 확정)
 
