@@ -43,6 +43,14 @@ export interface Board {
   id: string;
   name: string;
   createdAt: string;
+  shareId: string | null;
+}
+
+/** 공개(읽기 전용) 보드 보기 — shareId 로 접근. */
+export interface SharedBoardView {
+  board: { id: string; name: string };
+  owner: { name: string; avatarUrl: string | null } | null;
+  cards: Card[];
 }
 
 export interface OrganizeGroup {
@@ -50,10 +58,34 @@ export interface OrganizeGroup {
   cardIds: string[];
 }
 
+/** 아직 서버 응답을 기다리는, 생성 중인 카드(스켈레톤 표시용). */
+export interface PendingCard {
+  id: string;
+  url: string;
+}
+
 export type CopilotMode = 'live' | 'demo';
+export type AuthMode = 'live' | 'demo';
 
 export interface Health {
   status: string;
   copilotMode: CopilotMode;
+  authMode?: AuthMode;
   version?: string;
+}
+
+export type AuthProvider = 'github' | 'demo';
+
+export interface User {
+  id: string;
+  provider: AuthProvider;
+  login: string;
+  name: string;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface AuthInfo {
+  user: User | null;
+  authMode: AuthMode;
 }

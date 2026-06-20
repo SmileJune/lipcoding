@@ -199,6 +199,69 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/boards/{id}/share:
+    post:
+      tags: [boards]
+      summary: 보드 공개 공유 활성화
+      description: >
+        보드에 추측 어려운 공유 토큰을 발급(이미 있으면 유지)하여
+        누구나 로그인 없이 읽기 전용으로 볼 수 있게 한다.
+      operationId: shareBoard
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: 공유 정보
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [boards]
+      summary: 보드 공유 해제
+      operationId: unshareBoard
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: 공유 해제된 보드
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [board]
+                properties:
+                  board:
+                    $ref: '#/components/schemas/Board'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/shared/{shareId}:
+    get:
+      tags: [boards]
+      summary: 공개 공유 보드 조회 (인증 불필요)
+      description: >
+        공유 토큰으로 보드와 카드를 읽기 전용으로 조회한다. 로그인 없이 접근 가능.
+      operationId: getSharedBoard
+      security: []
+      parameters:
+        - name: shareId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 공유 보드 보기
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedBoardView'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/chat:
     post:
       tags: [ai]
@@ -366,7 +429,7 @@ components:
 
     Board:
       type: object
-      required: [id, name, createdAt]
+      required: [id, name, createdAt, shareId]
       properties:
         id:
           type: string
@@ -377,6 +440,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        shareId:
+          type: [string, 'null']
+          description: 공개 공유 토큰. null이면 비공개.
 
     CreateCardFromUrlRequest:
       type: object
@@ -437,6 +503,41 @@ components:
                 type: array
                 items:
                   type: string
+
+    ShareResponse:
+      type: object
+      required: [board, shareId]
+      properties:
+        board:
+          $ref: '#/components/schemas/Board'
+        shareId:
+          type: string
+          description: 공개 공유 토큰
+
+    SharedBoardView:
+      type: object
+      description: 공개(읽기 전용) 보드 보기
+      required: [board, owner, cards]
+      properties:
+        board:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        owner:
+          type: [object, 'null']
+          properties:
+            name:
+              type: string
+            avatarUrl:
+              type: [string, 'null']
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
 
     ChatRequest:
       type: object

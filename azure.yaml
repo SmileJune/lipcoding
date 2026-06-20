@@ -9,12 +9,14 @@ services:
     language: ts
     host: appservice
 
-# 패키징 전: 프론트(web) 빌드 → api/public 으로 복사(App Service 가 정적 서빙)
+# 패키징 전: 프론트(web) 빌드 → api/public 으로 복사(App Service 가 정적 서빙),
+# 그리고 백엔드(api) TypeScript → dist 컴파일(App Service 가 `node dist/server.js` 로 기동).
+# Oryx 빌드가 스킵되어도 dist 가 항상 패키지에 포함되도록 여기서 직접 빌드한다.
 hooks:
   prepackage:
     posix:
       shell: sh
-      run: npm --prefix web ci && npm --prefix web run build && rm -rf api/public && cp -r web/dist api/public
+      run: npm --prefix web ci && npm --prefix web run build && rm -rf api/public && cp -r web/dist api/public && npm --prefix api ci && npm --prefix api run build
     windows:
       shell: pwsh
-      run: npm --prefix web ci; npm --prefix web run build; if (Test-Path api/public) { Remove-Item -Recurse -Force api/public }; Copy-Item -Recurse web/dist api/public
+      run: npm --prefix web ci; npm --prefix web run build; if (Test-Path api/public) { Remove-Item -Recurse -Force api/public }; Copy-Item -Recurse web/dist api/public; npm --prefix api ci; npm --prefix api run build

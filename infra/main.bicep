@@ -10,6 +10,17 @@ param location string
 @secure()
 param githubToken string = ''
 
+@description('GitHub OAuth 앱 Client ID (선택, 비우면 데모 로그인)')
+param githubOAuthClientId string = ''
+
+@description('GitHub OAuth 앱 Client Secret (선택)')
+@secure()
+param githubOAuthClientSecret string = ''
+
+@description('세션 JWT 서명 비밀 (선택, 비우면 데모 로그인)')
+@secure()
+param sessionSecret string = ''
+
 var tags = { 'azd-env-name': environmentName }
 
 resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
@@ -26,6 +37,9 @@ module resources './modules/resources.bicep' = {
     location: location
     tags: tags
     githubToken: githubToken
+    githubOAuthClientId: githubOAuthClientId
+    githubOAuthClientSecret: githubOAuthClientSecret
+    sessionSecret: sessionSecret
   }
 }
 

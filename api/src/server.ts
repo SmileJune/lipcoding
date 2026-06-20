@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { createApp } from './app.js';
 import { copilotMode } from './ai.js';
+import { authMode } from './auth.js';
 import { initStore } from './store.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,6 @@ const app = createApp();
 
 app.listen(port, '0.0.0.0', () => {
   console.log(
-    `Curio API on :${port} (copilot: ${copilotMode()}, store: ${dataMode})`,
+    `Curio API on :${port} (copilot: ${copilotMode()}, store: ${dataMode}, auth: ${authMode()})`,
   );
 });

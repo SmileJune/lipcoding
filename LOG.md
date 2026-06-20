@@ -177,13 +177,48 @@
   - **환경**: azd env `curio`(구독 `Azure subscription 1`, 위치 `koreacentral`), `GITHUB_TOKEN` 설정(출력 없이).
   - 계획서 `.azure/deployment-plan.md` Status → **Validated**. 남은 단계: 사용자 승인 후 `azd up`(azure-deploy).
 
+### 25. 사용자 인증 설계 + GitHub OAuth 결정 (2026-06-20)
+- **Q**: "사용자 인증부터 설계해줘" → 어떤 로그인 방식으로 구현할지.
+- **A / 결정**: **GitHub OAuth**(객관식에서 사용자 선택). 앱이 GitHub 중심이라 자연스럽고 로컬·테스트 용이.
+  - **세션**: 서버 발급 **서명 JWT(jose)** 를 httpOnly·secure·sameSite=lax 쿠키에 저장(상태 비저장 → Cosmos/인메모리 동일).
+  - **데모 폴백**(Copilot 패턴 동일): OAuth env 미설정 시 **데모 사용자 자동 로그인** → 로컬 항상 동작. `/api/health` 에 `authMode: live|demo`.
+  - **데이터 격리**: `users` 컨테이너 신설 + `Board`/`Card` 에 `ownerId` 추가, 모든 스토어 조회를 ownerId 로 필터(파티션키는 `/id` 유지, ownerId 필터로 격리 — 컨테이너 재생성 회피). 기본 보드 "전체" 는 사용자별 시드.
+  - **API**: `GET /api/auth/login|callback`, `POST /api/auth/logout`, `GET /api/auth/me` + `requireAuth` 미들웨어(데이터 라우트 보호, health·auth 공개). ownerId 는 **세션에서만**.
+  - **프론트**: `useAuth` 컨텍스트, 401→로그인 화면(GitHub 버튼), 아바타·로그아웃, `credentials:'same-origin'`.
+  - **보안(OWASP)**: state CSRF 방지·오픈리다이렉트 차단·변경요청 Origin 검사·client secret 은 App Settings(secure)/Key Vault.
+  - **인프라**: Bicep `users` 컨테이너 + 앱설정 `GITHUB_OAUTH_CLIENT_ID/SECRET`·`SESSION_SECRET`. GitHub OAuth 앱 등록(콜백 URL)은 사용자가 1회.
+
+### 26. 병렬 작업 분리 — 서로 간섭하지 않는 트랙 선정 (2026-06-20)
+- **Q**: 기능을 병렬 처리할 예정. 각 작업이 서로 간섭하지 않을 만한 작업들을 골라줘.
+- **A / 결정**:
+  - 현 상태 점검: 항목 25(GitHub OAuth 인증)가 **미커밋**으로 코어 파일 대부분 점유 중. 핫 파일 = 백엔드 `app/service/store/memory-store/cosmos-store/server/types`, 프론트 `App.tsx/api.ts/Sidebar.tsx/styles.css/types`, `infra/*`.
+  - 병렬은 **인증이 안 건드린 파일·신규 디렉터리**에서만 선정 → 4개 배타적 트랙 추천:
+    - **A. AI 요약 품질 개선** — `api/src/ai.ts`(+test). 시그니처 유지.
+    - **B. 본문 추출 견고화** — `api/src/extract.ts`·`ssrf.ts`(+test). `Article` 형태 유지.
+    - **C. 카드 UI/상세 개선** — `web/.../CardItem.tsx`·`Board.tsx`+신규 `card.css`(+test). 새 props·`styles.css` 미사용.
+    - **D. Chrome 확장(2차)** — 신규 `extension/*`. 기존 API만 호출, 0 충돌.
+    - (선택) **E2E 자동화** — 신규 `e2e/*` + 자체 package.json.
+  - 회피 규칙: 네 트랙 모두 `types/store/service/app/server/App.tsx/api.ts/Sidebar.tsx/styles.css` 미수정. 새 필드·엔드포인트·props 필요 시 인증과 충돌하므로 병렬 제외 후 순차 처리.
+  - 권장: 진행 중 인증을 먼저 커밋/stash 해 안정 베이스 확보 후 레인 시작.
+
+### 27. 보드 공유 기능 — 공개 읽기 전용 링크 (2026-06-20)
+- **Q**: 보드를 채우고 해당 보드를 공유할 수 있는 기능 만들어줘.
+- **A / 결정**:
+  - **공유 토큰**: `Board.shareId`(nullable) 추가. `newShareId()` = UUID(하이픈 제거, 32 hex, 122비트) — 추측 불가한 공개 식별자. 공유 시 1회 생성·재사용(idempotent), 중지 시 `null`.
+  - **API**: `POST /api/boards/:id/share`(공유 시작·링크 반환), `DELETE /api/boards/:id/share`(공유 중지) — 모두 `requireAuth`. 공개 조회 `GET /api/shared/:shareId` 는 **인증 없이** 접근(`security: []`), 보드명·소유자(이름/아바타)·카드만 반환.
+  - **스토어**: `Store` 에 `updateBoard`·`getBoardByShareId`·`listCardsByBoardId` 추가, memory·cosmos 양쪽 구현. 모든 조회는 ownerId 격리 유지, 공개 조회만 shareId 기반.
+  - **프론트**: 상단바 `ShareBar`(🔗 공유 → 링크/복사/공유중지), `?share=<id>` 진입 시 `main.tsx` 가 읽기 전용 `SharedBoard` 렌더(편집 컨트롤 없음, 카드 위치 보존, "나도 Curio 시작하기" CTA).
+  - **보안**: shareId 추측 불가 + 서버에서 `board.shareId !== shareId` 이중 검사로 404. 공개 뷰는 메모·소유자 이메일 등 민감정보 미노출.
+  - **테스트**: 백엔드 service·store·app(supertest) 공유 경로 추가 → **91개**, 프론트 api·App·신규 `SharedBoard` → **32개**, 합계 **123개 통과**. OpenAPI(redocly) 유효.
+  - **E2E 시연**: 단일 서버(api/public)에서 카드 추가 → 공유 링크 발급 → `?share=` 읽기 전용 뷰 정상 확인(스크린샷). dev 프록시(5173→7071)는 동일 출처 CSRF 방어에 걸리므로 시연은 단일 출처로 진행.
+
 ---
 
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준), `.azure/deployment-plan.md`(배포 계획·검증)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 62 + 프론트 20 = **82개 통과** · 타입체크·빌드·azd preview/package 통과
+- **테스트**: ✅ 백엔드 91 + 프론트 32 = **123개 통과** · 타입체크·빌드·azd preview/package 통과
 - **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
 - **배포 상태**: 계획서 **Validated** — `azd up` 만 남음(사용자 승인 대기)
 

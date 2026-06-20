@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import { resetMemory, DEFAULT_BOARD_ID } from '../src/store.js';
+import { resetMemory, defaultBoardId } from '../src/store.js';
 import type { Article } from '../src/types.js';
+
+const DEFAULT_BOARD_ID = defaultBoardId('demo');
 
 const deps = {
   extract: async (url: string): Promise<Article> => ({ url, title: '추출', text: '본문.', imageUrl: null }),
@@ -91,6 +93,36 @@ describe('HTTP API', () => {
       .send({});
     expect(res.status).toBe(200);
     expect(res.body.groups[0].label).toBe('g');
+  });
+
+  it('POST /api/boards/:id/share → 200 shareId 발급', async () => {
+    const res = await request(app()).post(`/api/boards/${DEFAULT_BOARD_ID}/share`).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.shareId).toMatch(/^[a-f0-9]{32}$/);
+    expect(res.body.board.shareId).toBe(res.body.shareId);
+  });
+
+  it('DELETE /api/boards/:id/share → 200 공유 해제', async () => {
+    const a = app();
+    await request(a).post(`/api/boards/${DEFAULT_BOARD_ID}/share`).send({});
+    const res = await request(a).delete(`/api/boards/${DEFAULT_BOARD_ID}/share`);
+    expect(res.status).toBe(200);
+    expect(res.body.board.shareId).toBeNull();
+  });
+
+  it('GET /api/shared/:shareId 공개 조회(보드+카드)', async () => {
+    const a = app();
+    await request(a).post('/api/cards/from-url').send({ url: 'https://x' });
+    const shared = await request(a).post(`/api/boards/${DEFAULT_BOARD_ID}/share`).send({});
+    const res = await request(a).get(`/api/shared/${shared.body.shareId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.board.name).toBe('전체');
+    expect(res.body.cards).toHaveLength(1);
+  });
+
+  it('GET /api/shared/:shareId 잘못된 토큰 → 404', async () => {
+    const res = await request(app()).get('/api/shared/badtoken');
+    expect(res.status).toBe(404);
   });
 
   it('POST /api/chat', async () => {

@@ -1,22 +1,28 @@
 import { useState, type FormEvent } from 'react';
-import type { Board, CopilotMode } from '../types';
+import type { AuthMode, Board, CopilotMode, User } from '../types';
 
 interface Props {
   boards: Board[];
   selectedBoardId: string;
   copilotMode: CopilotMode | null;
+  user: User;
+  authMode: AuthMode;
   onSelect: (boardId: string) => void;
   onCreate: (name: string) => void;
   onToggleAi: () => void;
+  onLogout: () => void;
 }
 
 export function Sidebar({
   boards,
   selectedBoardId,
   copilotMode,
+  user,
+  authMode,
   onSelect,
   onCreate,
   onToggleAi,
+  onLogout,
 }: Props) {
   const [name, setName] = useState('');
 
@@ -67,6 +73,24 @@ export function Sidebar({
           Copilot: {copilotMode === 'live' ? 'LIVE' : '데모'}
         </div>
       )}
+
+      <div className="user-box">
+        <div className="user-info">
+          {user.avatarUrl ? (
+            <img className="user-avatar" src={user.avatarUrl} alt="" width={28} height={28} />
+          ) : (
+            <span className="user-avatar user-avatar-fallback" aria-hidden="true">
+              {user.name.slice(0, 1)}
+            </span>
+          )}
+          <span className="user-name">{user.name}</span>
+        </div>
+        {authMode === 'live' && (
+          <button className="logout-btn" onClick={onLogout} aria-label="로그아웃">
+            로그아웃
+          </button>
+        )}
+      </div>
     </aside>
   );
 }

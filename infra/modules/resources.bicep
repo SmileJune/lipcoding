@@ -13,6 +13,17 @@ param tags object = {}
 @secure()
 param githubToken string = ''
 
+@description('GitHub OAuth 앱 Client ID (선택 — 미설정 시 데모 로그인)')
+param githubOAuthClientId string = ''
+
+@description('GitHub OAuth 앱 Client Secret (선택)')
+@secure()
+param githubOAuthClientSecret string = ''
+
+@description('세션 JWT 서명 비밀 (선택 — 미설정 시 데모 로그인)')
+@secure()
+param sessionSecret string = ''
+
 var serviceName = 'curio'
 var suffix = take(uniqueString(subscription().id, resourceGroup().name, name), 6)
 
@@ -20,6 +31,7 @@ var suffix = take(uniqueString(subscription().id, resourceGroup().name, name), 6
 var cosmosDatabaseName = 'curio'
 var cardsContainerName = 'cards'
 var boardsContainerName = 'boards'
+var usersContainerName = 'users'
 // Cosmos DB Built-in Data Contributor (data-plane RBAC, 키리스)
 var cosmosDataContributorRoleId = '00000000-0000-0000-0000-000000000002'
 
@@ -106,6 +118,20 @@ resource boardsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
   }
 }
 
+resource usersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' = {
+  parent: cosmosDatabase
+  name: usersContainerName
+  properties: {
+    resource: {
+      id: usersContainerName
+      partitionKey: {
+        paths: ['/id']
+        kind: 'Hash'
+      }
+    }
+  }
+}
+
 // ---------- App Service ----------
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'plan-${name}-${suffix}'
@@ -141,7 +167,8 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       appCommandLine: 'node dist/server.js'
       appSettings: [
         { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
-        { name: 'NODE_ENV', value: 'production' }
+        // NODE_ENV=production 을 두면 Oryx 의 npm install 이 devDependencies(typescript)를 건너뛰어
+        // 서버 빌드(tsc)가 실패한다. 런타임 프로덕션 감지는 WEBSITE_SITE_NAME 으로 처리.
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'ApplicationInsightsAgent_EXTENSION_VERSION', value: '~3' }
         { name: 'GITHUB_TOKEN', value: githubToken }
@@ -149,6 +176,10 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'COSMOS_DATABASE', value: cosmosDatabaseName }
         { name: 'COSMOS_CARDS_CONTAINER', value: cardsContainerName }
         { name: 'COSMOS_BOARDS_CONTAINER', value: boardsContainerName }
+        { name: 'COSMOS_USERS_CONTAINER', value: usersContainerName }
+        { name: 'GITHUB_OAUTH_CLIENT_ID', value: githubOAuthClientId }
+        { name: 'GITHUB_OAUTH_CLIENT_SECRET', value: githubOAuthClientSecret }
+        { name: 'SESSION_SECRET', value: sessionSecret }
       ]
     }
   }
