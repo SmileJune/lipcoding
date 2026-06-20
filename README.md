@@ -2,7 +2,7 @@
 
 > 흩어진 웹 정보를 **AI 요약 카드**로 모아 나만의 지식 **보드**로 정리하는 개인 생산성 웹 앱
 
-링크 하나를 붙여넣으면 GitHub Copilot SDK가 페이지를 분석해 **제목·요약·핵심 포인트·태그**를 갖춘 카드로 만들어 줍니다. 사용자는 카드에 메모를 더하고 드래그앤드롭으로 자유롭게 배치하며 자기만의 큐레이션 보드를 완성합니다.
+링크 하나를 붙여넣으면 **Azure OpenAI**(미설정 시 GitHub Copilot SDK)가 페이지를 분석해 **제목·요약·핵심 포인트·태그**를 갖춘 카드로 만들어 줍니다. 사용자는 카드에 메모를 더하고 드래그앤드롭으로 자유롭게 배치하며 자기만의 큐레이션 보드를 완성합니다.
 
 **🔗 라이브 데모: [app-curio-osnoy7.azurewebsites.net](https://app-curio-osnoy7.azurewebsites.net)**
 
@@ -27,7 +27,7 @@
 ## 🧩 주요 기능
 
 - **링크 → 카드 생성** — URL 입력 시 본문을 추출해 AI 요약 카드를 자동 생성
-- **AI 요약** — 제목·1줄 요약·핵심 포인트·추천 태그를 Copilot SDK로 생성
+- **AI 요약** — 제목·1줄 요약·핵심 포인트·추천 태그를 Azure OpenAI(폴백: Copilot SDK)로 생성
 - **대표 이미지** — 페이지 `og:image` 썸네일 자동 표시
 - **비주얼 보드** — `@dnd-kit` 기반 드래그앤드롭 배치, 카드 색상 변경
 - **메모** — 각 카드에 자유 메모 추가
@@ -47,7 +47,9 @@
 | 프론트엔드 | React + TypeScript + Vite, `@dnd-kit` |
 | 백엔드 | Node.js + Express (TypeScript ESM) |
 | 본문 추출 | `@mozilla/readability` + `jsdom` |
-| AI | GitHub Copilot SDK (`@copilot-extensions/preview-sdk`) |
+| AI 모델 | **Azure OpenAI (Azure AI Foundry)** — 키리스 관리 ID 인증, 1순위 모델 레이어 |
+| AI 오케스트레이션 | GitHub Copilot SDK (`@github/copilot-sdk`) — 세션·도구(함수 호출)·SSE 스트리밍 |
+| AI 폴백 | Azure OpenAI → Copilot SDK(`GITHUB_TOKEN`) → 데모, 3단 폴백으로 항상 동작 |
 | 데이터 | 인메모리(개발) → Azure Cosmos DB(프로덕션, 키리스 RBAC) |
 | 인증 | GitHub OAuth (`jose` JWT 세션) + 데모 폴백 |
 | 배포 | Azure App Service(Linux) + Cosmos DB, `azd` |
@@ -95,7 +97,10 @@ npm run dev      # http://localhost:5173 에서 Vite 개발 서버 실행
 
 | 변수 | 설명 |
 |------|------|
-| `GITHUB_TOKEN` | Copilot SDK 인증 토큰. 미설정 시 데모 요약으로 폴백 |
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI 엔드포인트. `AZURE_OPENAI_DEPLOYMENT` 와 함께 있으면 **azure** provider 로 동작 |
+| `AZURE_OPENAI_DEPLOYMENT` | 호출할 모델 배포 이름 (기본 `gpt-4o-mini`) |
+| `AZURE_OPENAI_API_VERSION` | 데이터 평면 API 버전 (기본 `2024-10-21`) |
+| `GITHUB_TOKEN` | Copilot SDK 인증 토큰(2순위 폴백). 미설정 시 데모 요약으로 폴백 |
 | `PORT` | 백엔드 포트 (기본 `7071`) |
 | `COSMOS_ENDPOINT` | 설정 시 Cosmos DB 사용, 미설정 시 인메모리 스토어 |
 | `COSMOS_DATABASE` / `COSMOS_CONTAINER` | Cosmos 데이터베이스·컨테이너 이름 |
@@ -139,7 +144,7 @@ npm run lint:api           # api 패키지에서 (redocly)
 | `GET` | `/api/shared/:shareId` | 공유 보드 읽기 전용 조회(공개) |
 | `POST` | `/api/chat` | 카드/보드 기반 Q&A |
 | `GET` | `/api/auth/me` · `/api/auth/login` · `/api/auth/callback` | GitHub OAuth 인증 |
-| `GET` | `/api/health` | 상태 + Copilot/인증/스토어 모드 |
+| `GET` | `/api/health` | 상태 + AI provider(azure/github/demo)·인증·스토어 모드 |
 
 전체 명세는 [api/openapi.yaml](api/openapi.yaml) 참고.
 
@@ -153,7 +158,7 @@ npm run lint:api           # api 패키지에서 (redocly)
 │   ├── src/
 │   │   ├── app.ts       # 라우트 정의
 │   │   ├── service.ts   # 비즈니스 로직
-│   │   ├── ai.ts        # Copilot SDK 연동 + 데모 폴백
+│   │   ├── ai.ts        # Azure OpenAI / Copilot SDK 연동 + 데모 폴백
 │   │   ├── extract.ts   # 본문 추출 (readability + jsdom)
 │   │   ├── ssrf.ts      # SSRF 방어 (사설 IP 차단)
 │   │   ├── auth.ts      # GitHub OAuth + 세션

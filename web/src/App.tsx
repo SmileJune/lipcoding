@@ -168,9 +168,9 @@ export function App() {
 
   async function ask(question: string) {
     setBusy(true);
+    setAnswer('');
     try {
-      const res = await api.chat(question, selectedBoardId || undefined);
-      setAnswer(res.answer);
+      await api.chatStream(question, selectedBoardId || undefined, (partial) => setAnswer(partial));
     } catch (e) {
       showError(e);
     } finally {

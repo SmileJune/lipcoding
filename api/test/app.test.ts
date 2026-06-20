@@ -14,6 +14,11 @@ const deps = {
   summarize: async () => ({ title: '요약제목', summary: '요약', keyPoints: ['a'], tags: ['t'] }),
   organize: async () => [{ label: 'g', cardIds: [] as string[] }],
   chat: async () => '답변',
+  chatStream: async (_q: string, _ctx: unknown, onDelta?: (c: string) => void) => {
+    onDelta?.('부');
+    onDelta?.('분');
+    return '부분답변';
+  },
   copilotMode: () => 'demo' as const,
 };
 
@@ -129,6 +134,22 @@ describe('HTTP API', () => {
     const res = await request(app()).post('/api/chat').send({ question: '질문?' });
     expect(res.status).toBe(200);
     expect(res.body.answer).toBe('답변');
+  });
+
+  it('POST /api/chat/stream → SSE 델타 + done', async () => {
+    const res = await request(app()).post('/api/chat/stream').send({ question: '질문?' });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.text).toContain('data: {"delta":"부"}');
+    expect(res.text).toContain('data: {"delta":"분"}');
+    expect(res.text).toContain('"done":true');
+    expect(res.text).toContain('부분답변');
+  });
+
+  it('POST /api/chat/stream 질문 없으면 400 JSON', async () => {
+    const res = await request(app()).post('/api/chat/stream').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('bad_request');
   });
 
   it('잘못된 JSON 본문 → 400', async () => {

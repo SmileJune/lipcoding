@@ -20,7 +20,13 @@ const fakeSummarize = async () => ({
 });
 const fakeOrganize = async () => [{ label: '그룹', cardIds: [] as string[] }];
 const fakeChat = async () => '챗 답변';
+const fakeChatStream = async (_q: string, _ctx: unknown, onDelta?: (c: string) => void) => {
+  onDelta?.('A');
+  onDelta?.('B');
+  return 'AB';
+};
 const liveMode = () => 'live' as const;
+const azureProvider = () => 'azure' as const;
 
 function svc() {
   return createService({
@@ -28,7 +34,9 @@ function svc() {
     summarize: fakeSummarize,
     organize: fakeOrganize,
     chat: fakeChat,
+    chatStream: fakeChatStream,
     copilotMode: liveMode,
+    aiProvider: azureProvider,
   });
 }
 
@@ -39,7 +47,12 @@ beforeEach(async () => {
 
 describe('service', () => {
   it('health 는 copilotMode/authMode 포함', () => {
-    expect(svc().health()).toMatchObject({ status: 'ok', copilotMode: 'live', authMode: 'demo' });
+    expect(svc().health()).toMatchObject({
+      status: 'ok',
+      copilotMode: 'live',
+      aiProvider: 'azure',
+      authMode: 'demo',
+    });
   });
 
   it('createCardFromUrl: 카드 생성(요약 반영)', async () => {
@@ -176,5 +189,16 @@ describe('service', () => {
 
   it('chat 질문 없으면 → 400', async () => {
     await expect(svc().chat(OWNER, {})).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('chatStream: onDelta 델타 + 최종답변', async () => {
+    const seen: string[] = [];
+    const r = await svc().chatStream(OWNER, { question: 'q' }, (c) => seen.push(c));
+    expect(seen).toEqual(['A', 'B']);
+    expect(r.answer).toBe('AB');
+  });
+
+  it('chatStream 질문 없으면 → 400', async () => {
+    await expect(svc().chatStream(OWNER, {}, () => {})).rejects.toMatchObject({ status: 400 });
   });
 });

@@ -274,12 +274,24 @@
   - **보안**: Client Secret 이 채팅에 노출됨 → GitHub 에서 재발급(rotate) 권장. `.env` 는 표준 변수명(GITHUB_OAUTH_CLIENT_ID/SECRET)으로 정리, gitignore 유지.
 
 ---
+### 33. Copilot SDK 통합 심화 — 세션 오케스트레이션·도구·스트리밍 (2026-06-20)
+- **Q**: 외부 평가가 "Copilot SDK가 `@copilot-extensions/preview-sdk` 의 단발 `prompt` 3종을 감싼 얇은 기본 프롬프팅 — 도구 호출·멀티스텝·스트리밍·정교한 컨텍스트 없음"으로 지적. 개선 후 해당 내용만 커밋·푸시 요청.
+- **A / 결정**:
+  - SDK 교체: `@copilot-extensions/preview-sdk`(단발 `prompt`) → **`@github/copilot-sdk` 세션 오케스트레이션**. 더 이상 import되지 않는 구 의존성을 `package.json`/lock 에서 제거(죽은 의존성 정리).
+  - **도구(함수 호출)**: 카드 Q&A 세션에 `search_cards` 도구(`defineTool` + zod 스키마) 노출 → 모델이 보드 카드를 직접 검색해 근거로 사용(멀티스텝 에이전트 루프).
+  - **스트리밍(SSE)**: 백엔드 `POST /api/chat/stream`(`assistant.message_delta` → `data:` 이벤트) + 프런트 `api.chatStream`(ReadableStream 파서, 스트림 불가 시 `/api/chat` 폴백) → 토큰 단위 답변 표시.
+  - **provider 추상화(BYOM)**: `aiProvider()` 가 env 로 Azure OpenAI/Foundry(관리 ID 베어러 토큰, `wireApi:completions`) ↔ GitHub 기본 ↔ demo 자동 선택. 어떤 경로 실패해도 데모 폴백 유지(working-gate 보호).
+  - **service 리팩터**: `chat`/`chatStream` 공통 `resolveChat`(질문 검증 + cardId/boardId → 컨텍스트 카드 해석)로 DRY. DI 주입(`Runner`)으로 라이브 호출 없이 도구·스트리밍·파싱 단위 테스트.
+  - **테스트**: 백엔드 91 → **106**(ai 22·service 25·app 21 등, 스트리밍·도구·provider 감지 추가), 프런트 37 → **41**(`chatStream` SSE 파싱·폴백·App 스트리밍). 타입체크·API 빌드(`dist/server.js`)·Web 빌드 통과.
+  - **문서**: README·PROJECT 의 SDK 표기를 `@github/copilot-sdk`(세션·도구·스트리밍)로 갱신.
+  - **커밋 범위**: 본 개선(코드·테스트·의존성·문서)만 선별 커밋. 무관한 썬네일 referrer 수정(CardItem/SharedBoard)·임시 스모크 파일은 제외.
 
+---
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준), `.azure/deployment-plan.md`(배포 계획·검증)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 91 + 프론트 37 = **128개 통과** · 타입체크·빌드·azd preview/package 통과
+- **테스트**: ✅ 백엔드 106 + 프론트 41 = **147개 통과** · 타입체크·빌드·azd preview/package 통과
 - **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
 - **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 보드 공유 기능 배포됨. startup 커맨드 `node dist/server.js` 명시(tsx 크래시 루프 수정). **GitHub OAuth 라이브 로그인 활성화됨**(authMode=live, `/api/auth/login` → github.com 302 정상).
 

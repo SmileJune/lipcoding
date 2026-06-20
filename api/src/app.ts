@@ -247,6 +247,40 @@ export function createApp(deps: ServiceDeps = {}, options: AppOptions = {}): Exp
     }),
   );
 
+  // 스트리밍 Q&A (SSE). 토큰 단위로 답변을 흘려보냄.
+  app.post(
+    '/api/chat/stream',
+    wrap(async (req, res) => {
+      const body = (req.body ?? {}) as { question?: unknown };
+      // 검증 실패는 SSE 헤더 설정 전에 JSON 4xx 로 응답.
+      if (typeof body.question !== 'string' || !body.question.trim()) {
+        throw new HttpError(400, 'bad_request', 'question 은 필수입니다.');
+      }
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+      const send = (data: Record<string, unknown>): void => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      try {
+        const { answer } = await service.chatStream(
+          (req as AuthedRequest).user.id,
+          req.body ?? {},
+          (delta) => send({ delta }),
+        );
+        send({ done: true, answer });
+      } catch (err) {
+        const status = err instanceof HttpError ? err.status : 500;
+        const message = err instanceof HttpError ? err.message : '서버 오류가 발생했습니다.';
+        send({ error: message, status });
+      } finally {
+        res.end();
+      }
+    }),
+  );
+
   // 정적 프론트(SPA) 서빙 — 빌드 산출물이 있을 때만.
   const staticDir = options.staticDir ?? resolve(process.cwd(), 'public');
   if (existsSync(staticDir)) {

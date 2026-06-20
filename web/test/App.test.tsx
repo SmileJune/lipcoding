@@ -17,6 +17,7 @@ vi.mock('../src/api', () => ({
     createBoard: vi.fn(),
     organize: vi.fn(),
     chat: vi.fn(),
+    chatStream: vi.fn(),
     shareBoard: vi.fn(),
     unshareBoard: vi.fn(),
     getSharedBoard: vi.fn(),

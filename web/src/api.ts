@@ -77,6 +77,66 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ question, boardId }),
     }),
+
+  /**
+   * 스트리밍 Q&A (SSE). onDelta(누적 답변)를 토큰 단위로 호출하고 최종 답변을 반환.
+   * 스트림 불가/오류 시 비스트리밍 /api/chat 로 폴백.
+   */
+  chatStream: async (
+    question: string,
+    boardId: string | undefined,
+    onDelta: (partial: string) => void,
+  ): Promise<string> => {
+    try {
+      const res = await fetch(`${BASE}/api/chat/stream`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question, boardId }),
+      });
+      if (!res.ok || !res.body) throw new Error('stream_unavailable');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let answer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          let evt: { delta?: string; done?: boolean; answer?: string; error?: string };
+          try {
+            evt = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          if (typeof evt.delta === 'string') {
+            answer += evt.delta;
+            onDelta(answer);
+          } else if (evt.error) {
+            throw new Error(evt.error);
+          } else if (evt.done) {
+            if (typeof evt.answer === 'string') answer = evt.answer;
+            onDelta(answer);
+          }
+        }
+      }
+      return answer;
+    } catch {
+      const res = await http<{ answer: string }>('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ question, boardId }),
+      });
+      onDelta(res.answer);
+      return res.answer;
+    }
+  },
 };
 
 export type { Board, Card, CardColor, OrganizeGroup, SharedBoardView };

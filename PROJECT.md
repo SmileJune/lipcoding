@@ -199,13 +199,13 @@ flowchart LR
 
 ## 9. Copilot SDK 활용 상세
 
-`@copilot-extensions/preview-sdk` 를 사용하며, 토큰 미설정 시 **데모 폴백**으로 앱이 그대로 동작합니다(심사 환경 안정성).
+`@github/copilot-sdk` 기반 **세션 오케스트레이션**으로 구현합니다. 단발 프롬프트가 아니라 세션(`createSession`) + **도구 호출(함수 호출)** + **SSE 스트리밍** 을 사용하며, provider 는 Azure OpenAI/Foundry(관리 ID 베어러 토큰, BYOM) 또는 GitHub 기본을 자동 선택합니다. 토큰·엔드포인트 미설정 시 **데모 폴백**으로 앱이 그대로 동작합니다(심사 환경 안정성).
 
-| 사용처 | 프롬프트 역할 | 출력 |
-|--------|---------------|------|
-| 페이지 요약 | "본문을 요약·핵심정리하는 큐레이터" | `{ title, summary, keyPoints[], tags[] }` |
-| 정리 도우미 | "카드들을 주제별로 묶는 정리 전문가" | 그룹·라벨 제안 |
-| 카드 Q&A | "보드 내용 기반 어시스턴트 'Curio'" | 자연어 답변 |
+| 사용처 | 오케스트레이션 | 출력 |
+|--------|----------------|------|
+| 페이지 요약 | 세션 + 구조화 JSON 파싱 | `{ title, summary, keyPoints[], tags[] }` |
+| 정리 도우미 | 세션 + 카드 컨텍스트 그룹핑 | 그룹·라벨 제안 |
+| 카드 Q&A | 세션 + `search_cards` 도구(함수 호출) + SSE 스트리밍 | 토큰 단위 자연어 답변 |
 
 ---
 
@@ -216,7 +216,7 @@ flowchart LR
 | Frontend | React + TypeScript + Vite, `@dnd-kit` (드래그앤드롭) |
 | Backend | Node.js + Express (또는 Azure Functions) |
 | 본문 추출 | `@mozilla/readability` + `jsdom` |
-| AI | GitHub Copilot SDK (`@copilot-extensions/preview-sdk`) |
+| AI | GitHub Copilot SDK (`@github/copilot-sdk`) — 세션·도구·스트리밍 |
 | 데이터 | 인메모리(MVP) → Azure Cosmos DB |
 | 배포 | Azure Static Web Apps + Azure Functions/App Service |
 | 확장(2차) | Chrome Extension (Manifest V3) |

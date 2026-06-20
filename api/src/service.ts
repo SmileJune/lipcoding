@@ -16,7 +16,9 @@ export interface ServiceDeps {
   summarize?: typeof ai.summarize;
   organize?: typeof ai.organize;
   chat?: typeof ai.chat;
+  chatStream?: typeof ai.chatStream;
   copilotMode?: typeof ai.copilotMode;
+  aiProvider?: typeof ai.aiProvider;
 }
 
 export function createService(deps: ServiceDeps = {}) {
@@ -24,13 +26,36 @@ export function createService(deps: ServiceDeps = {}) {
   const summarize = deps.summarize ?? ai.summarize;
   const organize = deps.organize ?? ai.organize;
   const chatFn = deps.chat ?? ai.chat;
+  const chatStreamFn = deps.chatStream ?? ai.chatStream;
   const copilotMode = deps.copilotMode ?? ai.copilotMode;
+  const aiProvider = deps.aiProvider ?? ai.aiProvider;
+
+  // chat / chatStream 공통: 질문 검증 + 컨텍스트(카드) 해석.
+  async function resolveChat(
+    ownerId: string,
+    input: { question?: unknown; boardId?: unknown; cardId?: unknown },
+  ): Promise<{ question: string; context: Card[] }> {
+    if (typeof input.question !== 'string' || !input.question.trim()) {
+      throw new HttpError(400, 'bad_request', 'question 은 필수입니다.');
+    }
+    let context: Card[];
+    if (typeof input.cardId === 'string') {
+      const card = await getStore().getCard(ownerId, input.cardId);
+      context = card ? [card] : [];
+    } else if (typeof input.boardId === 'string') {
+      context = await getStore().listCards(ownerId, input.boardId);
+    } else {
+      context = await getStore().listCards(ownerId);
+    }
+    return { question: input.question, context };
+  }
 
   return {
     health() {
       return {
         status: 'ok' as const,
         copilotMode: copilotMode(),
+        aiProvider: aiProvider(),
         authMode: authMode(),
         version: '0.1.0',
       };
@@ -197,19 +222,19 @@ export function createService(deps: ServiceDeps = {}) {
       ownerId: string,
       input: { question?: unknown; boardId?: unknown; cardId?: unknown },
     ) {
-      if (typeof input.question !== 'string' || !input.question.trim()) {
-        throw new HttpError(400, 'bad_request', 'question 은 필수입니다.');
-      }
-      let context: Card[];
-      if (typeof input.cardId === 'string') {
-        const card = await getStore().getCard(ownerId, input.cardId);
-        context = card ? [card] : [];
-      } else if (typeof input.boardId === 'string') {
-        context = await getStore().listCards(ownerId, input.boardId);
-      } else {
-        context = await getStore().listCards(ownerId);
-      }
-      const answer = await chatFn(input.question, context);
+      const { question, context } = await resolveChat(ownerId, input);
+      const answer = await chatFn(question, context);
+      return { answer };
+    },
+
+    /** 스트리밍 Q&A. onDelta 로 토큰을 전달하고 최종 답변을 반환. */
+    async chatStream(
+      ownerId: string,
+      input: { question?: unknown; boardId?: unknown; cardId?: unknown },
+      onDelta: (chunk: string) => void,
+    ) {
+      const { question, context } = await resolveChat(ownerId, input);
+      const answer = await chatStreamFn(question, context, onDelta);
       return { answer };
     },
   };

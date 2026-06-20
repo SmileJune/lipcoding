@@ -5,6 +5,17 @@ function fakeResponse(opts: { ok?: boolean; status?: number; json?: unknown }) {
   return { ok, status, json: async () => json } as Response;
 }
 
+function sseResponse(events: string[]) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const e of events) controller.enqueue(encoder.encode(e));
+      controller.close();
+    },
+  });
+  return { ok: true, status: 200, body: stream } as unknown as Response;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -98,5 +109,34 @@ describe('api client', () => {
     const view = await api.getSharedBoard('tok abc');
     expect(view.board.name).toBe('전체');
     expect(f.mock.calls[0][0]).toBe('/api/shared/tok%20abc');
+  });
+
+  it('chatStream 은 SSE 델타를 누적하고 최종 답변 반환', async () => {
+    const f = vi.fn().mockResolvedValue(
+      sseResponse([
+        'data: {"delta":"안"}\n\n',
+        'data: {"delta":"녕"}\n\n',
+        'data: {"done":true,"answer":"안녕하세요"}\n\n',
+      ]),
+    );
+    vi.stubGlobal('fetch', f);
+    const partials: string[] = [];
+    const answer = await api.chatStream('q', 'b1', (p) => partials.push(p));
+    expect(f.mock.calls[0][0]).toBe('/api/chat/stream');
+    expect(partials).toEqual(['안', '안녕', '안녕하세요']);
+    expect(answer).toBe('안녕하세요');
+  });
+
+  it('chatStream 스트림 실패 시 /api/chat 폴백', async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, body: null } as Response)
+      .mockResolvedValueOnce(fakeResponse({ json: { answer: '폴백답변' } }));
+    vi.stubGlobal('fetch', f);
+    const partials: string[] = [];
+    const answer = await api.chatStream('q', undefined, (p) => partials.push(p));
+    expect(answer).toBe('폴백답변');
+    expect(partials).toEqual(['폴백답변']);
+    expect(f.mock.calls[1][0]).toBe('/api/chat');
   });
 });
