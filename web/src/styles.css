@@ -214,6 +214,14 @@ body {
 .card-drag:active {
   cursor: grabbing;
 }
+.card-image {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  background: rgba(0, 0, 0, 0.04);
+}
 .card-title {
   font-weight: 700;
   font-size: 14px;

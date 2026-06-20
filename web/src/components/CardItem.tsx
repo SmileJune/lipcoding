@@ -41,6 +41,18 @@ export function CardItem({ card, onMemoCommit, onColorChange, onDelete }: Props)
         ⠿
       </div>
 
+      {card.imageUrl && (
+        <img
+          className="card-image"
+          src={card.imageUrl}
+          alt=""
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      )}
+
       <a className="card-title" href={card.sourceUrl} target="_blank" rel="noreferrer">
         {card.title}
       </a>

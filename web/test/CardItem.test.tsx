@@ -22,18 +22,18 @@ const baseCard: Card = {
   updatedAt: 'x',
 };
 
-function renderCard() {
+function renderCard(card: Card = baseCard) {
   const handlers = {
     onMemoCommit: vi.fn(),
     onColorChange: vi.fn(),
     onDelete: vi.fn(),
   };
-  render(
+  const utils = render(
     <DndContext>
-      <CardItem card={baseCard} {...handlers} />
+      <CardItem card={card} {...handlers} />
     </DndContext>,
   );
-  return handlers;
+  return { ...handlers, ...utils };
 }
 
 describe('CardItem', () => {
@@ -62,5 +62,17 @@ describe('CardItem', () => {
     const h = renderCard();
     await userEvent.click(screen.getByLabelText('카드 삭제'));
     expect(h.onDelete).toHaveBeenCalledWith('card-1');
+  });
+
+  it('imageUrl 있으면 썸네일 렌더', () => {
+    const { container } = renderCard({ ...baseCard, imageUrl: 'https://cdn.example.com/x.jpg' });
+    const img = container.querySelector('img.card-image') as HTMLImageElement | null;
+    expect(img).not.toBeNull();
+    expect(img?.src).toBe('https://cdn.example.com/x.jpg');
+  });
+
+  it('imageUrl 없으면 썸네일 없음', () => {
+    const { container } = renderCard();
+    expect(container.querySelector('img.card-image')).toBeNull();
   });
 });
