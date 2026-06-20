@@ -54,7 +54,7 @@ export function createService(deps: ServiceDeps = {}) {
         color: 'default',
         posX: 0,
         posY: 0,
-        imageUrl: null,
+        imageUrl: article.imageUrl,
         status: 'ready',
         createdAt: now,
         updatedAt: now,

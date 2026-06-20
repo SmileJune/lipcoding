@@ -58,6 +58,7 @@ export interface Article {
   url: string;
   title: string;
   text: string;
+  imageUrl: string | null;
 }
 
 export interface OrganizeGroup {

@@ -5,7 +5,7 @@ import * as store from '../src/store.js';
 import type { Article } from '../src/types.js';
 
 const deps = {
-  extract: async (url: string): Promise<Article> => ({ url, title: '추출', text: '본문.' }),
+  extract: async (url: string): Promise<Article> => ({ url, title: '추출', text: '본문.', imageUrl: null }),
   summarize: async () => ({ title: '요약제목', summary: '요약', keyPoints: ['a'], tags: ['t'] }),
   organize: async () => [{ label: 'g', cardIds: [] as string[] }],
   chat: async () => '답변',

@@ -6,8 +6,7 @@ import type { Article } from '../src/types.js';
 const fakeExtract = async (url: string): Promise<Article> => ({
   url,
   title: '추출제목',
-  text: '본문 텍스트.',
-});
+  text: '본문 텍스트.',  imageUrl: null,});
 const fakeSummarize = async () => ({
   title: '요약제목',
   summary: '한 줄 요약',

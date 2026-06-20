@@ -14,6 +14,14 @@ function htmlResponse(html: string, contentType = 'text/html; charset=utf-8'): R
 
 const okUrl = async () => new URL('https://example.com/article');
 
+function pageHtml(head: string): string {
+  const body =
+    '<article><h1>제목</h1><p>' +
+    '이것은 충분히 긴 본문 문장입니다. 큐레이션 카드를 위한 테스트 본문이며 여러 문장을 포함합니다. '.repeat(30) +
+    '</p></article>';
+  return `<html><head>${head}<title>페이지</title></head><body>${body}</body></html>`;
+}
+
 describe('extractArticle', () => {
   it('본문/제목 추출', async () => {
     const body =
@@ -54,5 +62,32 @@ describe('extractArticle', () => {
 
   it('SSRF: 실제 검증으로 사설 IP 거부 (400)', async () => {
     await expect(extractArticle('http://127.0.0.1/x')).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('og:image 를 절대 URL 로 추출', async () => {
+    const html = pageHtml('<meta property="og:image" content="https://cdn.example.com/a.jpg">');
+    const article = await extractArticle('https://example.com/article', {
+      fetchImpl: async () => htmlResponse(html),
+      assertUrl: okUrl,
+    });
+    expect(article.imageUrl).toBe('https://cdn.example.com/a.jpg');
+  });
+
+  it('og:image 없으면 twitter:image 폴백 + 상대경로 절대화', async () => {
+    const html = pageHtml('<meta name="twitter:image" content="/img/b.png">');
+    const article = await extractArticle('https://example.com/article', {
+      fetchImpl: async () => htmlResponse(html),
+      assertUrl: okUrl,
+    });
+    expect(article.imageUrl).toBe('https://example.com/img/b.png');
+  });
+
+  it('이미지 메타 없으면 null', async () => {
+    const html = pageHtml('');
+    const article = await extractArticle('https://example.com/article', {
+      fetchImpl: async () => htmlResponse(html),
+      assertUrl: okUrl,
+    });
+    expect(article.imageUrl).toBeNull();
   });
 });
