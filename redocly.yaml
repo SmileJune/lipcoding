@@ -1,0 +1,9 @@
+# Redocly 린트 설정 — Curio API
+# 명령: npx @redocly/cli lint api/openapi.yaml
+extends:
+  - recommended
+rules:
+  # MVP는 의도적으로 무인증(단일 사용자). 인증(Entra ID / GitHub OAuth)은 2차 도입.
+  security-defined: off
+  # 개인/해커톤 프로젝트 — 라이선스 명시는 선택.
+  info-license: off

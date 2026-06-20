@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: Curio API
+  version: 0.1.0
+  description: >
+    Curio — AI 웹 큐레이션 보드의 백엔드 REST API.
+    링크를 받아 본문을 추출하고 GitHub Copilot SDK로 요약 카드를 만들며,
+    카드/보드 관리와 AI 정리 도우미·Q&A를 제공한다.
+
+    인증: MVP는 단일 사용자(무인증). 2차에서 Entra ID / GitHub OAuth 도입 예정.
+
+    Copilot 모드: 토큰 미설정 시 데모 폴백으로 동작하며 `GET /api/health`의
+    `copilotMode` 로 현재 모드(live/demo)를 노출한다.
+  contact:
+    name: Curio
+servers:
+  - url: http://localhost:7071
+    description: 로컬 개발 (Azure Functions Core Tools 기본 포트)
+  - url: https://{app}.azurestaticapps.net
+    description: Azure Static Web Apps (배포)
+    variables:
+      app:
+        default: curio
+
+tags:
+  - name: cards
+    description: 카드 생성·조회·수정·삭제
+  - name: boards
+    description: 보드 관리 및 AI 정리 도우미
+  - name: ai
+    description: AI 기반 기능 (Q&A)
+  - name: system
+    description: 상태 점검
+
+paths:
+  /api/cards/from-url:
+    post:
+      tags: [cards]
+      summary: 링크로 카드 생성
+      description: >
+        URL의 본문을 추출(readability + jsdom)한 뒤 Copilot SDK로 요약하여
+        카드를 생성한다. SSRF 방지를 위해 사설/내부 IP 대상 URL은 거부하고,
+        본문 크기에 상한을 둔다.
+      operationId: createCardFromUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardFromUrlRequest'
+            examples:
+              basic:
+                value:
+                  url: https://example.com/article
+                  boardId: board-default
+      responses:
+        '201':
+          description: 생성된 카드
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: 본문 추출 실패(요약 불가)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: AI 요약 호출 실패 (데모 폴백도 불가한 예외 상황)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cards:
+    get:
+      tags: [cards]
+      summary: 카드 목록 조회
+      operationId: listCards
+      parameters:
+        - name: boardId
+          in: query
+          required: false
+          description: 지정 시 해당 보드의 카드만 반환. 생략 시 전체.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 카드 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+
+  /api/cards/{id}:
+    patch:
+      tags: [cards]
+      summary: 카드 수정
+      description: 메모·색상·위치(posX/posY)·태그·소속 보드 변경. 부분 업데이트.
+      operationId: updateCard
+      parameters:
+        - $ref: '#/components/parameters/CardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCardRequest'
+            examples:
+              moveAndMemo:
+                value:
+                  posX: 320
+                  posY: 140
+                  memo: 발표 3페이지에 인용
+                  color: yellow
+      responses:
+        '200':
+          description: 수정된 카드
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [cards]
+      summary: 카드 삭제
+      operationId: deleteCard
+      parameters:
+        - $ref: '#/components/parameters/CardId'
+      responses:
+        '204':
+          description: 삭제 완료 (본문 없음)
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/boards:
+    get:
+      tags: [boards]
+      summary: 보드 목록 조회
+      operationId: listBoards
+      responses:
+        '200':
+          description: 보드 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Board'
+    post:
+      tags: [boards]
+      summary: 보드 생성
+      operationId: createBoard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoardRequest'
+            examples:
+              study:
+                value:
+                  name: 공부할 것
+      responses:
+        '201':
+          description: 생성된 보드
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Board'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/boards/{id}/organize:
+    post:
+      tags: [boards]
+      summary: AI 정리 도우미 — 카드 그룹핑 제안
+      description: >
+        보드의 카드들을 Copilot SDK가 주제별로 묶어 그룹/라벨을 제안한다.
+        제안만 반환하며 실제 카드 이동은 클라이언트가 수행한다.
+      operationId: organizeBoard
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: 그룹핑 제안
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/chat:
+    post:
+      tags: [ai]
+      summary: 카드/보드 Q&A
+      description: >
+        지정한 보드 또는 카드의 내용을 컨텍스트로 자연어 질문에 답한다.
+        boardId·cardId 모두 생략하면 전체 카드를 컨텍스트로 사용.
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              ask:
+                value:
+                  boardId: board-default
+                  question: 이 보드에서 가장 중요한 인사이트 3가지는?
+      responses:
+        '200':
+          description: 답변
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/health:
+    get:
+      tags: [system]
+      summary: 상태 점검
+      description: 서버 상태와 Copilot 동작 모드(live/demo)를 반환.
+      operationId: health
+      responses:
+        '200':
+          description: 정상
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              examples:
+                live:
+                  value:
+                    status: ok
+                    copilotMode: live
+                    version: 0.1.0
+
+components:
+  parameters:
+    CardId:
+      name: id
+      in: path
+      required: true
+      description: 카드 ID
+      schema:
+        type: string
+    BoardId:
+      name: id
+      in: path
+      required: true
+      description: 보드 ID
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청 (검증 실패)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: 리소스를 찾을 수 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Card:
+      type: object
+      required:
+        - id
+        - boardId
+        - sourceUrl
+        - title
+        - summary
+        - keyPoints
+        - tags
+        - memo
+        - color
+        - posX
+        - posY
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          examples: [card-a1b2c3]
+        boardId:
+          type: string
+          examples: [board-default]
+        sourceUrl:
+          type: string
+          format: uri
+          examples: [https://example.com/article]
+        title:
+          type: string
+          description: AI 생성 제목
+        summary:
+          type: string
+          description: AI 생성 1줄 요약
+        keyPoints:
+          type: array
+          description: AI 생성 핵심 포인트 3~5개
+          items:
+            type: string
+        tags:
+          type: array
+          description: AI 추천 태그 + 사용자 태그
+          items:
+            type: string
+        memo:
+          type: string
+          description: 사용자 자유 메모
+          default: ''
+        color:
+          $ref: '#/components/schemas/CardColor'
+        posX:
+          type: number
+          description: 보드 캔버스 X 좌표
+          default: 0
+        posY:
+          type: number
+          description: 보드 캔버스 Y 좌표
+          default: 0
+        imageUrl:
+          type: [string, 'null']
+          format: uri
+          description: 2차(썸네일) 예약 필드. MVP에선 null.
+          default: null
+        status:
+          $ref: '#/components/schemas/CardStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CardColor:
+      type: string
+      description: 카드 색상(팔레트)
+      enum: [default, yellow, green, blue, pink, purple, gray]
+      default: default
+
+    CardStatus:
+      type: string
+      description: 카드 상태
+      enum: [ready, summarizing, error]
+      default: ready
+
+    Board:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          examples: [board-default]
+        name:
+          type: string
+          examples: [전체]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateCardFromUrlRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: 요약할 페이지 URL (http/https만 허용, 사설 IP 거부)
+        boardId:
+          type: string
+          description: 대상 보드. 생략 시 기본 보드("전체").
+
+    UpdateCardRequest:
+      type: object
+      description: 변경할 필드만 포함 (부분 업데이트)
+      minProperties: 1
+      properties:
+        boardId:
+          type: string
+        memo:
+          type: string
+        color:
+          $ref: '#/components/schemas/CardColor'
+        posX:
+          type: number
+        posY:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+
+    CreateBoardRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    OrganizeResponse:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items:
+            type: object
+            required: [label, cardIds]
+            properties:
+              label:
+                type: string
+                description: 그룹 라벨(주제)
+              cardIds:
+                type: array
+                items:
+                  type: string
+
+    ChatRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 1
+        boardId:
+          type: string
+          description: 컨텍스트 보드 (선택)
+        cardId:
+          type: string
+          description: 컨텍스트 카드 (선택)
+
+    ChatResponse:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+
+    Health:
+      type: object
+      required: [status, copilotMode]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        copilotMode:
+          type: string
+          description: live=실제 Copilot, demo=토큰 미설정 폴백
+          enum: [live, demo]
+        version:
+          type: string
+
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: '에러 코드 (예: bad_request, not_found, extraction_failed)'
+        message:
+          type: string
+          description: 사람이 읽는 설명
