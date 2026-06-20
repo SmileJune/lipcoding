@@ -5,6 +5,7 @@ import type {
   Card,
   CardColor,
   Health,
+  Insight,
   OrganizeGroup,
   SharedBoardView,
 } from './types';
@@ -60,6 +61,11 @@ export const api = {
 
   organize: (boardId: string) =>
     http<{ groups: OrganizeGroup[] }>(`/api/boards/${boardId}/organize`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  insights: (boardId: string) =>
+    http<{ insights: Insight[] }>(`/api/boards/${boardId}/insights`, {
       method: 'POST',
       body: '{}',
     }),
@@ -139,4 +145,4 @@ export const api = {
   },
 };
 
-export type { Board, Card, CardColor, OrganizeGroup, SharedBoardView };
+export type { Board, Card, CardColor, Insight, OrganizeGroup, SharedBoardView };

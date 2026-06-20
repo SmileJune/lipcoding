@@ -89,6 +89,7 @@ Curio는 링크 하나를 붙여넣으면 GitHub Copilot SDK가 페이지 본문
 | F10 | **보드 공유** | 공유 링크(`/api/shared/:shareId`)로 보드를 읽기 전용 공개 | — | ✅ |
 | F11 | **로딩 UX** | 카드 생성 중 스켈레톤 자리표시(점선·스피너·shimmer, `prefers-reduced-motion` 대응) | — | ✅ |
 | F12 | **GitHub 로그인** | GitHub OAuth 인증 + JWT 세션, 토큰 미설정 시 데모 모드 | — | ✅ |
+| F13 | **연결 인사이트** | 보드 전체를 가로질러 **연결·긴장·빈틈·다음 질문**을 추론(에이전트형, `find_related` 도구 호출) | ✅ | ✅ |
 
 ---
 
@@ -101,7 +102,7 @@ flowchart TD
     C --> D[카드 생성 - 로딩 중 스켈레톤]
     D --> E[보드에 배치]
     E --> F[사용자: 메모 추가 · 드래그앤드롭 · 색상 변경]
-    F --> G[AI 정리 도우미 / 카드 Q&A]
+    F --> G[AI 정리 도우미 / 연결 인사이트 / 카드 Q&A]
     F --> H[보드 공유 링크로 읽기 전용 공개]
 ```
 
@@ -166,6 +167,7 @@ erDiagram
 - **`status`**: `ready` · `summarizing` · `error` — 로딩 스켈레톤 표시에 사용.
 - **`imageUrl`**: 페이지 대표 이미지(`og:image`→`twitter:image`→`image_src`), 없으면 `null`.
 - **Board.`shareId`**: 공유 링크용 토큰(nullable). 설정 시 공개 읽기 전용 조회 가능.
+- **`Insight`**(비저장): 보드의 카드들을 가로질러 즉석에서 추론하는 `connection`·`tension`·`gap`·`question`. 저장하지 않고 요청 시 생성.
 - **데이터 격리**: 사용자별로 보드·카드를 분리 저장(`ensureUserSeed`).
 - MVP는 **인메모리 스토어**, 프로덕션은 **Azure Cosmos DB**로 자동 전환(`COSMOS_ENDPOINT` 설정 시).
 
@@ -183,12 +185,13 @@ flowchart LR
         API[REST API + 인증/세션]
         EX[본문 추출: readability + jsdom]
         SSRF[SSRF 방어]
-        AI[Copilot SDK 오케스트레이션 + 데모 폴백]
+        SEC[보안 헤더 CSP/HSTS + 프롬프트 인젝션 방어]
+        AI[AI 오케스트레이션: provider 추상화 + 데모 폴백]
     end
     DB[(Azure Cosmos DB / 인메모리)]
-    COP[[GitHub Copilot SDK]]
+    COP[[Azure OpenAI / GitHub Copilot SDK]]
 
-    UI --> API
+    UI --> SEC --> API
     API --> SSRF --> EX
     EX --> AI --> COP
     API --> DB
@@ -206,10 +209,13 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 |--------|----------------------|------|
 | **페이지 요약** (F2) | "본문을 요약·핵심정리하는 큐레이터" | `{ title, summary, keyPoints[], tags[] }` |
 | **정리 도우미** (F8) | "카드들을 주제별로 묶는 정리 전문가" | 그룹·라벨 제안 |
-| **카드 Q&A** (F9) | "보드 내용 기반 어시스턴트 'Curio'" | 자연어 답변 |
+| **연결 인사이트** (F13) | "카드 사이 숨은 관계를 찾는 추론 에이전트" (`find_related` 도구) | `Insight[]`(connection·tension·gap·question) |
+| **카드 Q&A** (F9) | "보드 내용 기반 어시스턴트 'Curio'" (`search_cards` 도구, SSE 스트리밍) | 자연어 답변 |
 
 **설계 원칙**
-- **Provider 추상화**: Azure OpenAI/Foundry(BYOM, 관리 ID 베어러 토큰) → GitHub Copilot 기본 → 데모 폴백 순으로 자동 선택.
+- **Provider 추상화**: Azure OpenAI/Foundry(BYOM, 키리스 관리 ID 베어러 토큰) → GitHub Copilot 기본 → 데모 폴백 순으로 자동 선택([api/src/ai.ts](api/src/ai.ts)의 `aiProvider`).
+- **에이전트형 오케스트레이션**: 단발 프롬프트가 아니라 `@github/copilot-sdk` 세션 + **함수 호출 도구**(`find_related`·`search_cards`) + **SSE 스트리밍**(`/api/chat/stream`)으로 다단계 추론.
+- **프롬프트 인젝션 방어**: 웹 본문·카드·질문 등 외부 입력을 구분자(`fenceUntrusted`)로 감싸고 시스템 프롬프트에 보안 규칙을 부착해 데이터 내 지시를 무시.
 - **항상 동작**: 어떤 경로든 실패하면 데모 응답으로 폴백해 라이브 핵심 흐름(working-gate)을 보호.
 - **테스트 가능성**: 실행기(runner)를 의존성 주입으로 모킹해 외부 호출 없이 검증.
 
@@ -222,21 +228,24 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 | 리소스 | 용도 |
 |--------|------|
 | **App Service (Linux, Node 20)** | Express가 React SPA + `/api` 서빙 (`node dist/server.js`) |
+| **Azure OpenAI (Cognitive Services, S0)** | AI 요약·정리·인사이트·Q&A의 **기본 모델 레이어**(`gpt-4o-mini` 배포, `disableLocalAuth`) |
 | **Cosmos DB (serverless)** | 카드·보드 영구 저장, 컨테이너 `cards`/`boards` |
 | **Application Insights / Log Analytics** | 텔레메트리·관측성 |
-| **Managed Identity + RBAC** | Cosmos를 **키 없이**(키리스) 관리 ID 기반 RBAC로 접근 |
+| **Managed Identity + RBAC** | Cosmos(Data Contributor) + Azure OpenAI(OpenAI User)를 **키 없이**(키리스) 관리 ID RBAC로 접근 |
 
 - **IaC**: [infra/main.bicep](infra/main.bicep) + [infra/modules/resources.bicep](infra/modules/resources.bicep), 배포 설정 [azure.yaml](azure.yaml).
 - **재현성**: `azd up` 한 번으로 프로비저닝 + 빌드(web→`api/public`) + 배포.
-- **런타임 인증**: 프로덕션에서 `ManagedIdentityCredential`/`DefaultAzureCredential`로 비밀 없이 자격 획득.
+- **키리스 추론**: Azure OpenAI 엔드포인트는 로컬 인증(API 키)을 비활성화하고, App Service 관리 ID의 `ManagedIdentityCredential`/`DefaultAzureCredential` Entra 토큰으로만 호출.
 
 ---
 
 ## 12. 보안 & Responsible AI
 
-- **SSRF 방어**: 외부 URL fetch 시 사설 IP 대역 차단, 본문 크기 제한([api/src/ssrf.ts](api/src/ssrf.ts)).
+- **SSRF 방어**: 외부 URL fetch 시 사설 IP 대역 차단, 본문 크기 제한, **리다이렉트 매 홉마다 재검증**(수동 추적으로 사설 IP 우회 마도 차단)([api/src/ssrf.ts](api/src/ssrf.ts), [api/src/extract.ts](api/src/extract.ts)).
+- **보안 헤더**: 모든 응답에 CSP·HSTS·X-Frame-Options(DENY)·X-Content-Type-Options·Referrer-Policy·Permissions-Policy·COOP 적용, `x-powered-by` 제거([api/src/app.ts](api/src/app.ts)).
+- **프롬프트 인젝션 방어**: 웹 본문·카드·질문 등 외부 입력을 구분자로 감싸고(`fenceUntrusted`) 시스템 프롬프트에 보안 규칙을 부착해 데이터 내 지시를 무시.
 - **시크릿 관리**: 비밀값은 `.env`(gitignore) / 환경변수 / Azure로만 관리하고 코드·커밋에 포함하지 않음. 템플릿은 `.env.example`.
-- **키리스 데이터 접근**: Cosmos DB는 액세스 키 대신 관리 ID 기반 RBAC 사용.
+- **키리스 데이터·모델 접근**: Cosmos DB·Azure OpenAI 모두 액세스 키 대신 관리 ID 기반 RBAC 사용.
 - **인증·세션**: GitHub OAuth + `jose` JWT 세션 쿠키(`sameSite=lax`), 변경 요청은 동일 출처만 허용(CSRF 완화).
 - **사용자 데이터 분리**: 보드·카드를 사용자별로 격리.
 - **AI 투명성**: AI가 생성한 필드와 사용자가 작성한 필드를 데이터 모델에서 분리. 실패 시 데모 폴백으로 graceful degradation.
@@ -251,7 +260,7 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 | 프론트엔드 | React + TypeScript + Vite, `@dnd-kit` |
 | 백엔드 | Node.js + Express (TypeScript ESM) |
 | 본문 추출 | `@mozilla/readability` + `jsdom` |
-| AI | GitHub Copilot SDK + 데모 폴백 |
+| AI | Azure OpenAI(Foundry, 키리스) → GitHub Copilot SDK → 데모 폴백 |
 | 데이터 | 인메모리(개발) → Azure Cosmos DB(프로덕션, 키리스 RBAC) |
 | 인증 | GitHub OAuth (`jose` JWT 세션) + 데모 폴백 |
 | 인프라 | Azure App Service(Linux) + Cosmos DB, Bicep IaC, `azd` |
@@ -269,6 +278,7 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 | `DELETE` | `/api/cards/:id` | 카드 삭제 |
 | `GET` / `POST` | `/api/boards` | 보드 목록 조회 / 생성 |
 | `POST` | `/api/boards/:id/organize` | AI 정리 도우미(그룹핑 제안) |
+| `POST` | `/api/boards/:id/insights` | 연결 인사이트(연결·긴장·빈틈·다음 질문 추론) |
 | `POST` / `DELETE` | `/api/boards/:id/share` | 보드 공유 링크 생성 / 해제 |
 | `GET` | `/api/shared/:shareId` | 공유 보드 읽기 전용 조회(공개) |
 | `POST` | `/api/chat` | 카드/보드 기반 Q&A |
@@ -294,10 +304,10 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 
 ## 16. 테스트 & 품질 보증
 
-- **백엔드**: Vitest 단위·통합 테스트 (`api/test/` — ai·app·auth·extract·service·ssrf·store).
-- **프론트엔드**: Vitest + Testing Library (`web/test/` — App·CardItem·CardSkeleton·dnd·LinkInput·SharedBoard·api).
-- **외부 호출 모킹**: Copilot·URL fetch를 모킹하고 **데모 폴백 경로도 함께 검증**.
-- **타입·린트**: `tsc` strict 통과, OpenAPI `redocly lint` 통과.
+- **백엔드**: Vitest 단위·통합 테스트 130개 통과 (`api/test/` — ai·app·auth·extract·service·ssrf·store).
+- **프론트엔드**: Vitest + Testing Library 41개 통과 (`web/test/` — App·CardItem·CardSkeleton·dnd·LinkInput·SharedBoard·api).
+- **외부 호출 모킹**: Copilot·URL fetch를 모킹하고 **데모 폴백 경로도 함께 검증**(인사이트·인젝션 방어·리다이렉트 SSRF 포함).
+- **타입·린트**: `tsc` strict 통과, OpenAPI `redocly lint` 통과, Bicep 빌드 유효.
 - **실행 명령**: `cd api && npm test`, `cd web && npm test`.
 - **완료 기준**: 테스트 작성 + 실제 실행 통과를 확인한 뒤에만 기능 완료로 간주.
 
@@ -309,6 +319,7 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 |------|------|
 | 라이브 URL | 🟢 https://app-curio-osnoy7.azurewebsites.net |
 | Health | `{"status":"ok","copilotMode":"live","authMode":"live"}` |
+| AI 모델 | 🟢 Azure OpenAI(`gpt-4o-mini`, 키리스 관리 ID) · 폴백 Copilot/데모 |
 | Copilot | 🟢 live (토큰 미설정 시 데모 폴백) |
 | 인증 | 🟢 GitHub OAuth 라이브 로그인 |
 | 데이터 | 🟢 Cosmos DB serverless (키리스 RBAC) |
@@ -332,13 +343,13 @@ AI 기능은 **GitHub Copilot SDK**로 구현하며, 토큰·provider 미설정 
 
 | 심사 항목 | Curio의 대응 |
 |-----------|--------------|
-| **Copilot SDK 활용** | 요약·정리·Q&A 3종 AI 기능을 Copilot SDK로 구현, provider 추상화 + 데모 폴백 |
+| **Copilot SDK 활용** | `@github/copilot-sdk` 세션 오케스트레이션 — 함수 호출 도구(`find_related`·`search_cards`) + SSE 스트리밍, provider 추상화 + 데모 폴백 |
 | **생산성 임팩트 & 문제 적합성** | "북마크의 죽음" 해결 — 누구나 매일 겪는 정보 정리 문제를 정조준 |
-| **Azure AI & 클라우드 통합** | App Service + Cosmos DB(키리스) + App Insights, 완전 Bicep IaC, `azd up` 재현 |
-| **기능성 & 기술 완성도** | 링크→카드→보드→공유 전 흐름 라이브 동작, 백엔드/프론트 테스트 통과 |
+| **Azure AI & 클라우드 통합** | Azure OpenAI(키리스 모델 레이어) + App Service + Cosmos DB(키리스) + App Insights, 완전 Bicep IaC, `azd up` 재현 |
+| **기능성 & 기술 완성도** | 링크→카드→보드→인사이트→공유 전 흐름 라이브 동작, 백엔드 130·프론트 41 테스트 통과 |
 | **UX & 워크플로 설계** | 드래그앤드롭 비주얼 보드, 로딩 스켈레톤, 수 초 카드 생성 |
-| **Responsible AI · 보안 · 신뢰** | SSRF 방어, 키리스 RBAC, OAuth 세션, 사용자 데이터 분리, AI/사용자 필드 분리, 데모 폴백 |
-| **혁신성 & 독창성** | 클리퍼 + AI 요약 + 자유 캔버스를 하나의 흐름으로 결합 |
+| **Responsible AI · 보안 · 신뢰** | SSRF(홉별 재검증)·보안 헤더(CSP/HSTS)·프롬프트 인젝션 방어·키리스 RBAC·OAuth 세션·사용자 데이터 분리·데모 폴백 |
+| **혁신성 & 독창성** | 클리퍼 + AI 요약 + 자유 캔버스에 더해, 카드를 가로지르는 **연결 인사이트 에이전트**로 차별화 |
 
 ---
 

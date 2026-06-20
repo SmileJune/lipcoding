@@ -58,6 +58,17 @@ export interface OrganizeGroup {
   cardIds: string[];
 }
 
+/** 보드 인사이트 종류 — 연결·긴장·빈틈·다음 질문. */
+export type InsightKind = 'connection' | 'tension' | 'gap' | 'question';
+
+/** 카드를 가로질러 추론한 한 가지 인사이트. */
+export interface Insight {
+  kind: InsightKind;
+  title: string;
+  detail: string;
+  cardIds: string[];
+}
+
 /** 아직 서버 응답을 기다리는, 생성 중인 카드(스켈레톤 표시용). */
 export interface PendingCard {
   id: string;

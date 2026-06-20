@@ -58,10 +58,20 @@ describe('CardItem', () => {
     expect(h.onColorChange).toHaveBeenCalledWith('card-1', 'yellow');
   });
 
-  it('삭제 클릭 시 onDelete', async () => {
+  it('삭제는 확인 단계를 거쳐 onDelete 호출', async () => {
     const h = renderCard();
     await userEvent.click(screen.getByLabelText('카드 삭제'));
+    expect(h.onDelete).not.toHaveBeenCalled(); // 첫 클릭은 확인만 노출
+    await userEvent.click(screen.getByLabelText('삭제 확인'));
     expect(h.onDelete).toHaveBeenCalledWith('card-1');
+  });
+
+  it('삭제 취소 시 onDelete 미호출', async () => {
+    const h = renderCard();
+    await userEvent.click(screen.getByLabelText('카드 삭제'));
+    await userEvent.click(screen.getByLabelText('삭제 취소'));
+    expect(h.onDelete).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('카드 삭제')).toBeInTheDocument(); // 원래 버튼 복귀
   });
 
   it('imageUrl 있으면 썸네일 렌더', () => {
@@ -69,6 +79,12 @@ describe('CardItem', () => {
     const img = container.querySelector('img.card-image') as HTMLImageElement | null;
     expect(img).not.toBeNull();
     expect(img?.src).toBe('https://cdn.example.com/x.jpg');
+  });
+
+  it('썸네일은 referrerPolicy=no-referrer 로 hotlink 차단 우회', () => {
+    const { container } = renderCard({ ...baseCard, imageUrl: 'https://regexr.com/assets/card.png' });
+    const img = container.querySelector('img.card-image') as HTMLImageElement | null;
+    expect(img?.getAttribute('referrerpolicy')).toBe('no-referrer');
   });
 
   it('imageUrl 없으면 썸네일 없음', () => {

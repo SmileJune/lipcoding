@@ -297,12 +297,22 @@
   - 검증: `az bicep build` 경고 0·에러 0. 백엔드 테스트 통과(`aiProvider` azure 감지 기존 테스트 유지). 배포는 별도 `azd up`(Azure OpenAI 쿼터 필요).
   - **커밋 범위**: 본 개선(인프라 Bicep·`.env.example`·로그)만 선별 커밋. 동시에 진행 중이던 무관한 "Insight/synthesize" 기능 작업(ai.ts/types/openapi/app/web 등)은 작업 트리에 그대로 두고 제외.
 
+### 35. 구현 기능 일괄 정리 — PRD 갱신·커밋·배포 (2026-06-20)
+- **Q**: "현재까지 구현된 내용을 바탕으로 PRD.md 수정해서 커밋 푸시 먼저 하고 배포도 진행해줘."
+- **A / 결정**:
+  - 진단: 워킹트리에 미커밋 기능 세트가 쌓여 있었음 — **연결 인사이트**(`synthesize` + `find_related` 도구, 데모 폴백), **보안 헤더**(CSP·HSTS·X-Frame-Options·COOP 등 + `x-powered-by` 제거), **프롬프트 인젝션 방어**(`fenceUntrusted` 구분자 + `INJECTION_GUARD`), **SSRF 강화**(리다이렉트 홉별 재검증 + 재시도), **썸네일 no-referrer 소스**(CardItem/SharedBoard), **ShareBar 두 단계 공유 확인**. 모두 테스트 포함.
+  - 병렬 세션 충돌 처리: 작업 중 다른 세션이 Azure OpenAI 인프라(항목 34)를 `966491d` 로 커밋함. 남은 ShareBar 작업이 **red**(테스트 2개 실패)로 방치 — ① 그룹 `<div>` 와 확인 버튼이 동일 `aria-label="공개 공유 확인"` → `getByLabelText` 다중 매치, ② 두 단계 전환으로 기존 `App.test.tsx` 미갱신. mtime 15분 유휴 확인 후 두 가지를 완성: 그룹 라벨을 `공개 공유 확인 요청` 으로 분리 + `App.test.tsx` 를 두 단계 흐름으로 갱신.
+  - **PRD.md 갱신**: F13 연결 인사이트 추가, Copilot SDK 표(에이전트형 도구·SSE·인젝션 방어), Azure OpenAI 리소스(키리스 RBAC) 추가, 보안 섹션(헤더·인젝션·홉별 SSRF), 기술 스택 AI 레이어, API 표 `/insights`, 테스트 수(130+45), 루브릭 대응 강화, 아키텍처 다이어그램.
+  - **검증**: 백엔드 130 + 프론트 45 = **175개 통과**. `tsc` strict·web 빌드·`redocly lint`·`az bicep build` 모두 유효.
+  - **커밋 범위**: 추적 변경 일괄 + 신규 `web/test/ShareBar.test.tsx`. 제외: `api/api/`(실수로 생긴 중첩 node_modules)·`api/smoke.mjs`(임시 스모크).
+  - **배포**: `azd` 로 Azure 재배포(prepackage 훅 web 빌드→`api/public`).
+
 ---
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
 - **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준), `.azure/deployment-plan.md`(배포 계획·검증)
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 106 + 프론트 41 = **147개 통과** · 타입체크·빌드·azd preview/package 통과
+- **테스트**: ✅ 백엔드 130 + 프론트 45 = **175개 통과** · 타입체크·빌드·redocly·bicep 유효
 - **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
 - **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 보드 공유 기능 배포됨. startup 커맨드 `node dist/server.js` 명시(tsx 크래시 루프 수정). **GitHub OAuth 라이브 로그인 활성화됨**(authMode=live, `/api/auth/login` → github.com 302 정상).
 

@@ -90,6 +90,21 @@ export interface OrganizeGroup {
   cardIds: string[];
 }
 
+/**
+ * 보드 인사이트 종류 — 카드를 가로질러 추론한 관계.
+ * connection: 서로 연결되는 카드 / tension: 상충·긴장 / gap: 빠진 관점·빈틈 / question: 다음에 탐구할 질문.
+ */
+export type InsightKind = 'connection' | 'tension' | 'gap' | 'question';
+
+/** 여러 카드를 종합해 도출한 한 가지 인사이트. */
+export interface Insight {
+  kind: InsightKind;
+  title: string;
+  detail: string;
+  /** 근거가 되는 카드 id (gap/question 은 비어 있을 수 있음). */
+  cardIds: string[];
+}
+
 /** HTTP 상태 코드를 가진 에러 */
 export class HttpError extends Error {
   readonly status: number;

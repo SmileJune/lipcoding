@@ -10,6 +10,7 @@ interface Props {
 
 export function ShareBar({ board, onShare, onUnshare }: Props) {
   const [copied, setCopied] = useState(false);
+  const [confirmingShare, setConfirmingShare] = useState(false);
 
   if (!board) return null;
 
@@ -27,8 +28,37 @@ export function ShareBar({ board, onShare, onUnshare }: Props) {
   }
 
   if (!board.shareId) {
+    // 공개 공유는 보드 내용을 누구나 볼 수 있게 하므로 확인 단계를 거친다.
+    if (confirmingShare) {
+      return (
+        <div className="share-confirm" role="group" aria-label="공개 공유 확인 요청">
+          <span className="share-warn">링크가 있는 누구나 이 보드를 볼 수 있습니다. 공개할까요?</span>
+          <button
+            className="share-yes"
+            onClick={() => {
+              setConfirmingShare(false);
+              onShare(board.id);
+            }}
+            aria-label="공개 공유 확인"
+          >
+            공개 공유
+          </button>
+          <button
+            className="share-no"
+            onClick={() => setConfirmingShare(false)}
+            aria-label="공개 공유 취소"
+          >
+            취소
+          </button>
+        </div>
+      );
+    }
     return (
-      <button className="share-btn" onClick={() => onShare(board.id)} aria-label="보드 공유">
+      <button
+        className="share-btn"
+        onClick={() => setConfirmingShare(true)}
+        aria-label="보드 공유"
+      >
         🔗 공유
       </button>
     );

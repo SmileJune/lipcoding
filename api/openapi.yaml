@@ -199,6 +199,27 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/boards/{id}/insights:
+    post:
+      tags: [boards]
+      summary: 연결 인사이트 에이전트 — 카드 간 숨은 관계 발견
+      description: >
+        단순 그룹핑을 넘어, 보드의 카드들을 가로질러 연결(connection)·긴장(tension)·
+        빈틈(gap)·다음 질문(question) 을 추론한다. find_related 도구로 근거 카드를 모으는
+        다단계 추론 에이전트. live 실패 시 데모 휴리스틱으로 항상 동작한다.
+      operationId: boardInsights
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: 인사이트 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/boards/{id}/share:
     post:
       tags: [boards]
@@ -501,6 +522,30 @@ components:
                 description: 그룹 라벨(주제)
               cardIds:
                 type: array
+                items:
+                  type: string
+
+    InsightsResponse:
+      type: object
+      required: [insights]
+      properties:
+        insights:
+          type: array
+          items:
+            type: object
+            required: [kind, title, detail, cardIds]
+            properties:
+              kind:
+                type: string
+                enum: [connection, tension, gap, question]
+                description: 인사이트 종류(연결·긴장·빈틈·다음 질문)
+              title:
+                type: string
+              detail:
+                type: string
+              cardIds:
+                type: array
+                description: 근거 카드 id (gap/question 은 비어 있을 수 있음)
                 items:
                   type: string
 

@@ -85,4 +85,18 @@ describe('SharedBoard', () => {
     expect(await screen.findByText('공유 보드를 찾을 수 없습니다.')).toBeInTheDocument();
     expect(screen.getByText('Curio 홈으로')).toBeInTheDocument();
   });
+
+  it('썸네일은 referrerPolicy=no-referrer 로 hotlink 차단 우회', async () => {
+    mockedApi.getSharedBoard.mockResolvedValue({
+      board: { id: 'b1', name: '보드' },
+      owner: null,
+      cards: [makeCard({ id: 'card-1', imageUrl: 'https://regexr.com/assets/card.png' })],
+    } satisfies SharedBoardView);
+
+    const { container } = render(<SharedBoard shareId="tok" />);
+    await screen.findByText('보드');
+    const img = container.querySelector('img.card-image') as HTMLImageElement | null;
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('referrerpolicy')).toBe('no-referrer');
+  });
 });

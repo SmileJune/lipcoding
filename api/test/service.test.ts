@@ -19,6 +19,9 @@ const fakeSummarize = async () => ({
   tags: ['t1'],
 });
 const fakeOrganize = async () => [{ label: '그룹', cardIds: [] as string[] }];
+const fakeSynthesize = async () => [
+  { kind: 'connection' as const, title: '연결', detail: 'd', cardIds: [] as string[] },
+];
 const fakeChat = async () => '챗 답변';
 const fakeChatStream = async (_q: string, _ctx: unknown, onDelta?: (c: string) => void) => {
   onDelta?.('A');
@@ -33,6 +36,7 @@ function svc() {
     extract: fakeExtract,
     summarize: fakeSummarize,
     organize: fakeOrganize,
+    synthesize: fakeSynthesize,
     chat: fakeChat,
     chatStream: fakeChatStream,
     copilotMode: liveMode,
@@ -123,6 +127,15 @@ describe('service', () => {
 
   it('organizeBoard 없는 보드 → 404', async () => {
     await expect(svc().organizeBoard(OWNER, 'nope')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('boardInsights 인사이트 반환', async () => {
+    const r = await svc().boardInsights(OWNER, DEFAULT_BOARD_ID);
+    expect(r.insights[0].kind).toBe('connection');
+  });
+
+  it('boardInsights 없는 보드 → 404', async () => {
+    await expect(svc().boardInsights(OWNER, 'nope')).rejects.toMatchObject({ status: 404 });
   });
 
   it('shareBoard: shareId 생성 후 공유', async () => {

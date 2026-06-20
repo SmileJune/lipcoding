@@ -42,6 +42,39 @@ interface AuthedRequest extends Request {
 export function createApp(deps: ServiceDeps = {}, options: AppOptions = {}): Express {
   const app = express();
   app.set('trust proxy', 1); // Azure 로드밸런서 뒤
+  app.disable('x-powered-by'); // 기술 스택 노출 최소화
+
+  // ---------- 보안 헤더 (모든 응답: 정적 SPA · API · SSE) ----------
+  // CSP 는 SPA 호환: 스크립트/스타일/연결은 자기 출처, 썸네일은 외부 https 허용.
+  const CSP = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'", // React 인라인 스타일(카드 좌표) 허용
+    "img-src 'self' https: data:", // 외부 og:image 썸네일 · 아바타
+    "font-src 'self' data:",
+    "connect-src 'self'", // fetch · SSE 는 동일 출처(/api)
+  ].join('; ');
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Content-Security-Policy', CSP);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), browsing-topics=()',
+    );
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    // HSTS 는 HTTPS 요청에서만(Azure 는 x-forwarded-proto 로 TLS 종단).
+    if (req.secure || req.get('x-forwarded-proto') === 'https') {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
+
   const service = createService(deps);
   const fetchImpl = options.fetchImpl ?? fetch;
 
@@ -223,6 +256,13 @@ export function createApp(deps: ServiceDeps = {}, options: AppOptions = {}): Exp
     '/api/boards/:id/organize',
     wrap(async (req, res) => {
       res.json(await service.organizeBoard((req as AuthedRequest).user.id, req.params.id));
+    }),
+  );
+
+  app.post(
+    '/api/boards/:id/insights',
+    wrap(async (req, res) => {
+      res.json(await service.boardInsights((req as AuthedRequest).user.id, req.params.id));
     }),
   );
 

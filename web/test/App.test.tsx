@@ -163,6 +163,8 @@ describe('App', () => {
     await screen.findByText('전체');
 
     await userEvent.click(screen.getByRole('button', { name: '보드 공유' }));
+    // 공개 공유는 확인 단계를 거친다.
+    await userEvent.click(screen.getByRole('button', { name: '공개 공유 확인' }));
 
     expect(mockedApi.shareBoard).toHaveBeenCalledWith('board-default');
     const link = (await screen.findByLabelText('공유 링크')) as HTMLInputElement;

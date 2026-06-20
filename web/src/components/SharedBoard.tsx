@@ -82,7 +82,13 @@ export function SharedBoard({ shareId }: Props) {
               data-testid={`shared-card-${card.id}`}
             >
               {card.imageUrl && (
-                <img className="card-image" src={card.imageUrl} alt="" loading="lazy" />
+                <img
+                  className="card-image"
+                  src={card.imageUrl}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
               )}
               <a className="card-title" href={card.sourceUrl} target="_blank" rel="noreferrer">
                 {card.title}

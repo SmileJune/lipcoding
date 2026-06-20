@@ -7,6 +7,7 @@ import type {
   Card,
   CardColor,
   CopilotMode,
+  Insight,
   OrganizeGroup,
   PendingCard,
 } from './types';
@@ -29,6 +30,7 @@ export function App() {
   const [error, setError] = useState('');
   const [aiOpen, setAiOpen] = useState(false);
   const [groups, setGroups] = useState<OrganizeGroup[]>([]);
+  const [insights, setInsights] = useState<Insight[]>([]);
   const [answer, setAnswer] = useState('');
 
   const showError = useCallback((e: unknown) => {
@@ -66,6 +68,7 @@ export function App() {
     if (!selectedBoardId) return;
     api.listCards(selectedBoardId).then(setCards).catch(showError);
     setGroups([]);
+    setInsights([]);
     setAnswer('');
   }, [selectedBoardId, showError]);
 
@@ -166,6 +169,19 @@ export function App() {
     }
   }
 
+  async function discoverInsights() {
+    if (!selectedBoardId) return;
+    setBusy(true);
+    try {
+      const res = await api.insights(selectedBoardId);
+      setInsights(res.insights);
+    } catch (e) {
+      showError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function ask(question: string) {
     setBusy(true);
     setAnswer('');
@@ -231,9 +247,11 @@ export function App() {
         <AiPanel
           cards={cards}
           groups={groups}
+          insights={insights}
           answer={answer}
           busy={busy}
           onOrganize={organize}
+          onInsights={discoverInsights}
           onAsk={ask}
           onClose={() => setAiOpen(false)}
         />

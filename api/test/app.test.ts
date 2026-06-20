@@ -13,6 +13,9 @@ const deps = {
   extract: async (url: string): Promise<Article> => ({ url, title: '추출', text: '본문.', imageUrl: null }),
   summarize: async () => ({ title: '요약제목', summary: '요약', keyPoints: ['a'], tags: ['t'] }),
   organize: async () => [{ label: 'g', cardIds: [] as string[] }],
+  synthesize: async () => [
+    { kind: 'connection' as const, title: '연결', detail: 'd', cardIds: [] as string[] },
+  ],
   chat: async () => '답변',
   chatStream: async (_q: string, _ctx: unknown, onDelta?: (c: string) => void) => {
     onDelta?.('부');
@@ -100,6 +103,14 @@ describe('HTTP API', () => {
     expect(res.body.groups[0].label).toBe('g');
   });
 
+  it('POST /api/boards/:id/insights', async () => {
+    const res = await request(app())
+      .post(`/api/boards/${DEFAULT_BOARD_ID}/insights`)
+      .send({});
+    expect(res.status).toBe(200);
+    expect(res.body.insights[0].kind).toBe('connection');
+  });
+
   it('POST /api/boards/:id/share → 200 shareId 발급', async () => {
     const res = await request(app()).post(`/api/boards/${DEFAULT_BOARD_ID}/share`).send({});
     expect(res.status).toBe(200);
@@ -179,5 +190,26 @@ describe('HTTP API', () => {
     const res = await request(createApp(deps, { staticDir: dir })).get('/api/nope');
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('not_found');
+  });
+
+  it('보안 헤더(CSP·nosniff·frame·referrer·permissions)를 모든 응답에 설정', async () => {
+    const res = await request(app()).get('/api/health');
+    expect(res.headers['content-security-policy']).toContain("default-src 'self'");
+    expect(res.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(res.headers['content-security-policy']).toContain("object-src 'none'");
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+    expect(res.headers['permissions-policy']).toContain('camera=()');
+    expect(res.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('HSTS 는 HTTPS(x-forwarded-proto) 요청에서만 설정', async () => {
+    const plain = await request(app()).get('/api/health');
+    expect(plain.headers['strict-transport-security']).toBeUndefined();
+    const secure = await request(app())
+      .get('/api/health')
+      .set('x-forwarded-proto', 'https');
+    expect(secure.headers['strict-transport-security']).toContain('max-age=31536000');
   });
 });

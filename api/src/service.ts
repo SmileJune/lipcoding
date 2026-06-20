@@ -15,6 +15,7 @@ export interface ServiceDeps {
   extract?: typeof extractArticle;
   summarize?: typeof ai.summarize;
   organize?: typeof ai.organize;
+  synthesize?: typeof ai.synthesize;
   chat?: typeof ai.chat;
   chatStream?: typeof ai.chatStream;
   copilotMode?: typeof ai.copilotMode;
@@ -25,6 +26,7 @@ export function createService(deps: ServiceDeps = {}) {
   const extract = deps.extract ?? extractArticle;
   const summarize = deps.summarize ?? ai.summarize;
   const organize = deps.organize ?? ai.organize;
+  const synthesize = deps.synthesize ?? ai.synthesize;
   const chatFn = deps.chat ?? ai.chat;
   const chatStreamFn = deps.chatStream ?? ai.chatStream;
   const copilotMode = deps.copilotMode ?? ai.copilotMode;
@@ -176,6 +178,16 @@ export function createService(deps: ServiceDeps = {}) {
       const cards = await getStore().listCards(ownerId, id);
       const groups = await organize(cards);
       return { groups };
+    },
+
+    /** 보드 인사이트 — 카드를 가로질러 연결·긴장·빈틈·다음 질문을 추론. */
+    async boardInsights(ownerId: string, id: string) {
+      if (!(await getStore().getBoard(ownerId, id))) {
+        throw new HttpError(404, 'not_found', '보드를 찾을 수 없습니다.');
+      }
+      const cards = await getStore().listCards(ownerId, id);
+      const insights = await synthesize(cards);
+      return { insights };
     },
 
     /** 보드 공개 공유 활성화 — shareId 가 없으면 생성. */

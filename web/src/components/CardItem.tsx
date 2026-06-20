@@ -15,6 +15,7 @@ export function CardItem({ card, onMemoCommit, onColorChange, onDelete }: Props)
     id: card.id,
   });
   const [memo, setMemo] = useState(card.memo);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // 외부에서 카드가 바뀌면 메모 동기화
   useEffect(() => {
@@ -47,6 +48,7 @@ export function CardItem({ card, onMemoCommit, onColorChange, onDelete }: Props)
           src={card.imageUrl}
           alt=""
           loading="lazy"
+          referrerPolicy="no-referrer"
           onError={(e) => {
             e.currentTarget.style.display = 'none';
           }}
@@ -98,13 +100,35 @@ export function CardItem({ card, onMemoCommit, onColorChange, onDelete }: Props)
             />
           ))}
         </div>
-        <button
-          className="card-delete"
-          onClick={() => onDelete(card.id)}
-          aria-label="카드 삭제"
-        >
-          🗑
-        </button>
+        {confirmingDelete ? (
+          <div className="confirm-inline" role="group" aria-label="카드 삭제 확인">
+            <button
+              className="confirm-yes"
+              onClick={() => {
+                setConfirmingDelete(false);
+                onDelete(card.id);
+              }}
+              aria-label="삭제 확인"
+            >
+              삭제
+            </button>
+            <button
+              className="confirm-no"
+              onClick={() => setConfirmingDelete(false)}
+              aria-label="삭제 취소"
+            >
+              취소
+            </button>
+          </div>
+        ) : (
+          <button
+            className="card-delete"
+            onClick={() => setConfirmingDelete(true)}
+            aria-label="카드 삭제"
+          >
+            🗑
+          </button>
+        )}
       </div>
     </div>
   );
