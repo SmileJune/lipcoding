@@ -165,13 +165,25 @@
   - 표준화: `.github/copilot-instructions.md` 에 "완료 알림" 규칙 추가 + 메모리 기록.
 - **사용법**: `node scripts/codex-notify.mjs done "<요약>"` (실패 시 `failed`).
 
+### 24. Azure 배포 준비 — Cosmos 포함 + 검증 (2026-06-20)
+- **Q**: "엑스모스 DB 를 포함해서 배포 준비해줘" — Cosmos DB 까지 포함한 Azure 배포를 준비.
+- **A / 결정**:
+  - **아키텍처**: 단일 App Service(Linux B1, Node 20)가 Express 로 빌드된 React SPA(`api/public`) + `/api` 를 함께 서빙. Functions 재작성 없이 기존 Express 재사용. (대안 SWA+Functions 대비 단순)
+  - **스토어 비동기 리팩터**: `Store` 인터페이스 비동기화 → `memory-store`(로컬·테스트) / `cosmos-store`(`@azure/cosmos`, 키리스 관리 ID). `COSMOS_ENDPOINT` 설정 시 자동 전환, 미설정 시 인메모리 폴백. service/app/server 비동기화.
+  - **정적 SPA 서빙**: `express.static(public)` + 비 `/api` GET → `index.html` 폴백, `trust proxy`/`0.0.0.0`/health. (폴백 테스트 추가)
+  - **IaC**: `azure.yaml`(azd, prepackage 훅으로 web 빌드→api/public) + `infra/`(Bicep: RG, Log Analytics, App Insights, Cosmos serverless `cards`/`boards`, App Service, **Cosmos Data Contributor RBAC→Web App 관리 ID**).
+  - **검증(azure-validate 통과)**: azd 1.25.6 · bicep 컴파일 · `azd provision --preview` SUCCESS(6 리소스) · `azd package` SUCCESS(zip 에 SPA+dist+src, node_modules 제외) · RBAC 키리스 · 로컬 프로덕션 형태(`node dist/server.js`) /api·SPA 동작 확인.
+  - **테스트**: 백엔드 **62** + 프론트 **20** = **82개 통과**.
+  - **환경**: azd env `curio`(구독 `Azure subscription 1`, 위치 `koreacentral`), `GITHUB_TOKEN` 설정(출력 없이).
+  - 계획서 `.azure/deployment-plan.md` Status → **Validated**. 남은 단계: 사용자 승인 후 `azd up`(azure-deploy).
+
 ---
 
 ## 현재 상태 (스냅샷)
 - **앱**: Curio — AI 웹 큐레이션 보드 (링크 → 요약 카드 → 보드 큐레이션)
-- **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준)
-- **환경**: ✅ 도구 설치 완료 · Azure 로그인됨 · `gh` 로그인(SmileJune) · `.env` 준비 · **Copilot SDK LIVE 확인**
-- **테스트**: ✅ 백엔드 60 + 프론트 20 = **80개 통과** · 타입체크·빌드 통과
-- **코드**: 백엔드 `api/`(9 엔드포인트 + og:image 썸네일) + 프론트 `web/`(보드 UI + 썸네일) · 기능단위 커밋 18+개
-- **다음 단계**: Azure 배포 — azd+Bicep 으로 SWA+Functions+Cosmos 스캐폴드(리소스 계획 확정)
+- **문서**: `PROJECT.md`(설계), `LOG.md`(대화 로그), `.github/copilot-instructions.md`(작업 표준), `.azure/deployment-plan.md`(배포 계획·검증)
+- **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
+- **테스트**: ✅ 백엔드 62 + 프론트 20 = **82개 통과** · 타입체크·빌드·azd preview/package 통과
+- **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
+- **배포 상태**: 계획서 **Validated** — `azd up` 만 남음(사용자 승인 대기)
 
