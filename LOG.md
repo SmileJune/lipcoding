@@ -234,6 +234,16 @@
   - **테스트**: 신규 `CardSkeleton.test.tsx`(3) + `App.test.tsx` 에 지연 Promise 로 생성 중 스켈레톤 표시→완료 시 실제 카드 교체, 실패 시 스켈레톤 제거+에러 토스트(2) 추가 → 프론트 **37개**(기존 32+5) 통과, tsc strict+빌드 OK.
   - **시각 시연**(Playwright route mock, 응답 4s 지연): 스켈레톤(점선 아웃라인·스피너·shimmer·URL·버튼 "카드 생성 중…") 표시 후 실제 카드로 교체·버튼 복귀 스크린샷 확인.
 
+### 30. 보드 공유 배포 + 프로덕션 startup 크래시 루프 수정 (2026-06-20)
+- **Q**: 보드 공유 기능을 커밋하고 Azure 배포까지 진행해줘.
+- **A / 결정**:
+  - **커밋**: 보드 공유 기능을 `b7b70a7` 로 커밋(인증·카드 스켈레톤과 공유 코어 파일이 얽혀 분리 불가 → 단일 커밋, 36파일 +2286/−169).
+  - **재배포**: `azd up` — 인프라는 기존 존재(provision "Skipped: no changes"), 코드만 재배포. azd 가 `BuildInProgress` 폴링 타임아웃으로 실패 보고했으나 Kudu 로그 "Deployment successful" + 엔드포인트 정상 → **실배포 성공**(azd 폴링 타임아웃 ≠ 배포 실패).
+  - **크래시 루프 진단**: 배포 직후 정상 동작하다 컨테이너가 `Container did not start within 230s`·`exit code 1` 재시작 루프에 빠짐(모든 엔드포인트 000/타임아웃). 원인 = 라이브 앱 `startupCommand=null` → App Service 기본값 `npm start` = `tsx src/server.ts` 실행. **tsx 는 devDependency·매 기동마다 TS 재트랜스파일**이라 느리고 불안정. Bicep 엔 `appCommandLine: 'node dist/server.js'` 가 있었으나 provision skip 으로 라이브 미반영.
+  - **수정**: `az webapp config set -g rg-curio -n app-curio-osnoy7 --startup-file "node dist/server.js"` + restart → **health 200 / 2.4s 즉시 복구**. Bicep 과 동일 값이라 향후 `azd up` 에도 유지.
+  - **검증(LIVE)**: `/api/health` 200 `copilotMode:live`. 공개 공유 조회 `GET /api/shared/<id>` 200(보드명 + Copilot 라이브 요약 카드 반환, 메모/이메일 등 민감정보 미노출), 조회 직후 health 200 → **크래시 재발 없음**.
+  - **교훈**: 프로덕션 Node App Service 는 반드시 컴파일된 `node dist/server.js` 로 기동. `tsx`/dev `npm start` 금지. azd provision "Skipped" 면 siteConfig(appCommandLine) 가 라이브에 안 닿을 수 있으니 `az webapp config show --query startupCommand` 로 확인.
+
 ---
 
 ## 현재 상태 (스냅샷)
@@ -242,5 +252,5 @@
 - **환경**: ✅ 도구 설치 완료 · Azure 로그인됨(godhkekf24@inha.edu) · azd env `curio`(koreacentral) · `gh` 로그인(SmileJune) · **Copilot SDK LIVE 확인**
 - **테스트**: ✅ 백엔드 91 + 프론트 37 = **128개 통과** · 타입체크·빌드·azd preview/package 통과
 - **코드**: 백엔드 `api/`(비동기 스토어 memory/cosmos + 정적 SPA 서빙) + 프론트 `web/` + `azure.yaml`/`infra/`(Bicep) · 기능단위 커밋 20+개
-- **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 데모 모드 동작. GitHub OAuth 활성화는 사용자 OAuth 앱 등록 + `azd env set` 후 재배포.
+- **배포 상태**: ✅ **LIVE** — `https://app-curio-osnoy7.azurewebsites.net` (App Service Linux B1 + Cosmos serverless, 키리스 RBAC). 보드 공유 기능 배포됨. startup 커맨드 `node dist/server.js` 명시(tsx 크래시 루프 수정). 데모 모드 동작. GitHub OAuth 활성화는 사용자 OAuth 앱 등록 + `azd env set` 후 재배포.
 
