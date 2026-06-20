@@ -77,3 +77,19 @@ export class HttpError extends Error {
     this.code = code;
   }
 }
+
+export const DEFAULT_BOARD_ID = 'board-default';
+export const DEFAULT_BOARD_NAME = '전체';
+
+/** 데이터 저장소 인터페이스 (인메모리 / Cosmos 공통) */
+export interface Store {
+  ensureSeed(): Promise<void>;
+  listBoards(): Promise<Board[]>;
+  getBoard(id: string): Promise<Board | undefined>;
+  createBoard(name: string): Promise<Board>;
+  addCard(card: Card): Promise<Card>;
+  getCard(id: string): Promise<Card | undefined>;
+  listCards(boardId?: string): Promise<Card[]>;
+  updateCard(id: string, patch: Partial<Card>): Promise<Card | undefined>;
+  deleteCard(id: string): Promise<boolean>;
+}

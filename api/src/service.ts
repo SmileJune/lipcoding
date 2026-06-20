@@ -1,5 +1,5 @@
 // 비즈니스 로직: 스토어 + 추출 + AI 를 조합. HTTP 프레임워크 비의존(테스트 용이).
-import * as store from './store.js';
+import { getStore, DEFAULT_BOARD_ID, newCardId } from './store.js';
 import { extractArticle } from './extract.js';
 import * as ai from './ai.js';
 import { CARD_COLORS, HttpError, type Card, type CardColor } from './types.js';
@@ -28,12 +28,12 @@ export function createService(deps: ServiceDeps = {}) {
       if (typeof input.url !== 'string' || !input.url.trim()) {
         throw new HttpError(400, 'bad_request', 'url 은 필수입니다.');
       }
-      let boardId = store.DEFAULT_BOARD_ID;
+      let boardId = DEFAULT_BOARD_ID;
       if (input.boardId !== undefined) {
         if (typeof input.boardId !== 'string') {
           throw new HttpError(400, 'bad_request', 'boardId 형식 오류.');
         }
-        if (!store.getBoard(input.boardId)) {
+        if (!(await getStore().getBoard(input.boardId))) {
           throw new HttpError(404, 'not_found', '보드를 찾을 수 없습니다.');
         }
         boardId = input.boardId;
@@ -43,7 +43,7 @@ export function createService(deps: ServiceDeps = {}) {
       const summary = await summarize(article);
       const now = new Date().toISOString();
       const card: Card = {
-        id: store.newCardId(),
+        id: newCardId(),
         boardId,
         sourceUrl: article.url,
         title: summary.title,
@@ -59,14 +59,14 @@ export function createService(deps: ServiceDeps = {}) {
         createdAt: now,
         updatedAt: now,
       };
-      return store.addCard(card);
+      return getStore().addCard(card);
     },
 
-    listCards(boardId?: string): Card[] {
-      return store.listCards(boardId);
+    listCards(boardId?: string): Promise<Card[]> {
+      return getStore().listCards(boardId);
     },
 
-    updateCard(id: string, patch: Record<string, unknown>): Card {
+    async updateCard(id: string, patch: Record<string, unknown>): Promise<Card> {
       const allowed: Partial<Card> = {};
       if ('memo' in patch) {
         if (typeof patch.memo !== 'string') throw new HttpError(400, 'bad_request', 'memo 형식 오류.');
@@ -91,7 +91,7 @@ export function createService(deps: ServiceDeps = {}) {
         allowed.tags = patch.tags.map(String);
       }
       if ('boardId' in patch) {
-        if (typeof patch.boardId !== 'string' || !store.getBoard(patch.boardId)) {
+        if (typeof patch.boardId !== 'string' || !(await getStore().getBoard(patch.boardId))) {
           throw new HttpError(400, 'bad_request', 'boardId 오류.');
         }
         allowed.boardId = patch.boardId;
@@ -99,33 +99,33 @@ export function createService(deps: ServiceDeps = {}) {
       if (Object.keys(allowed).length === 0) {
         throw new HttpError(400, 'bad_request', '수정할 필드가 없습니다.');
       }
-      const updated = store.updateCard(id, allowed);
+      const updated = await getStore().updateCard(id, allowed);
       if (!updated) throw new HttpError(404, 'not_found', '카드를 찾을 수 없습니다.');
       return updated;
     },
 
-    deleteCard(id: string): void {
-      if (!store.deleteCard(id)) {
+    async deleteCard(id: string): Promise<void> {
+      if (!(await getStore().deleteCard(id))) {
         throw new HttpError(404, 'not_found', '카드를 찾을 수 없습니다.');
       }
     },
 
     listBoards() {
-      return store.listBoards();
+      return getStore().listBoards();
     },
 
-    createBoard(name: unknown) {
+    async createBoard(name: unknown) {
       if (typeof name !== 'string' || !name.trim()) {
         throw new HttpError(400, 'bad_request', 'name 은 필수입니다.');
       }
-      return store.createBoard(name.trim());
+      return getStore().createBoard(name.trim());
     },
 
     async organizeBoard(id: string) {
-      if (!store.getBoard(id)) {
+      if (!(await getStore().getBoard(id))) {
         throw new HttpError(404, 'not_found', '보드를 찾을 수 없습니다.');
       }
-      const cards = store.listCards(id);
+      const cards = await getStore().listCards(id);
       const groups = await organize(cards);
       return { groups };
     },
@@ -136,12 +136,12 @@ export function createService(deps: ServiceDeps = {}) {
       }
       let context: Card[];
       if (typeof input.cardId === 'string') {
-        const card = store.getCard(input.cardId);
+        const card = await getStore().getCard(input.cardId);
         context = card ? [card] : [];
       } else if (typeof input.boardId === 'string') {
-        context = store.listCards(input.boardId);
+        context = await getStore().listCards(input.boardId);
       } else {
-        context = store.listCards();
+        context = await getStore().listCards();
       }
       const answer = await chatFn(input.question, context);
       return { answer };

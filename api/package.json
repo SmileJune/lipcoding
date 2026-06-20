@@ -18,6 +18,8 @@
     "lint:api": "redocly lint openapi.yaml"
   },
   "dependencies": {
+    "@azure/cosmos": "^4.9.3",
+    "@azure/identity": "^4.13.1",
     "@copilot-extensions/preview-sdk": "^5.0.1",
     "@mozilla/readability": "^0.5.0",
     "dotenv": "^16.4.5",

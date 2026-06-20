@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import * as store from '../src/store.js';
+import { resetMemory, DEFAULT_BOARD_ID } from '../src/store.js';
 import type { Article } from '../src/types.js';
 
 const deps = {
@@ -16,7 +19,7 @@ function app() {
   return createApp(deps);
 }
 
-beforeEach(() => store.reset());
+beforeEach(() => resetMemory());
 
 describe('HTTP API', () => {
   it('GET /api/health', async () => {
@@ -84,7 +87,7 @@ describe('HTTP API', () => {
 
   it('POST /api/boards/:id/organize', async () => {
     const res = await request(app())
-      .post(`/api/boards/${store.DEFAULT_BOARD_ID}/organize`)
+      .post(`/api/boards/${DEFAULT_BOARD_ID}/organize`)
       .send({});
     expect(res.status).toBe(200);
     expect(res.body.groups[0].label).toBe('g');
@@ -107,5 +110,21 @@ describe('HTTP API', () => {
   it('알 수 없는 경로 → 404', async () => {
     const res = await request(app()).get('/api/nope');
     expect(res.status).toBe(404);
+  });
+
+  it('정적 SPA: 비 /api GET 은 index.html 폴백', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'curio-static-'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><body>CURIO_SPA</body>');
+    const res = await request(createApp(deps, { staticDir: dir })).get('/board/abc');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('CURIO_SPA');
+  });
+
+  it('정적 SPA 켜져도 미존재 /api 는 404 JSON', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'curio-static-'));
+    writeFileSync(join(dir, 'index.html'), 'x');
+    const res = await request(createApp(deps, { staticDir: dir })).get('/api/nope');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('not_found');
   });
 });

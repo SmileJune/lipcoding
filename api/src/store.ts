@@ -1,75 +1,29 @@
-// 인메모리 스토어 (MVP). 프로덕션에서는 Cosmos DB 로 교체.
-import { randomUUID } from 'node:crypto';
-import type { Board, Card } from './types.js';
+// 스토어 셀렉터: COSMOS_ENDPOINT 설정 시 Cosmos, 아니면 인메모리.
+import { memoryStore, resetMemory } from './memory-store.js';
+import type { Store } from './types.js';
 
-const boards = new Map<string, Board>();
-const cards = new Map<string, Card>();
+export { DEFAULT_BOARD_ID } from './types.js';
+export { newCardId } from './id.js';
+export { resetMemory };
 
-export const DEFAULT_BOARD_ID = 'board-default';
+let activeStore: Store = memoryStore;
 
-/** 스토어 초기화 (테스트에서 사용). 기본 보드 "전체" 시드. */
-export function reset(): void {
-  boards.clear();
-  cards.clear();
-  boards.set(DEFAULT_BOARD_ID, {
-    id: DEFAULT_BOARD_ID,
-    name: '전체',
-    createdAt: new Date().toISOString(),
-  });
+/** 현재 활성 스토어. */
+export function getStore(): Store {
+  return activeStore;
 }
 
-reset();
-
-export function listBoards(): Board[] {
-  return [...boards.values()];
-}
-
-export function getBoard(id: string): Board | undefined {
-  return boards.get(id);
-}
-
-export function createBoard(name: string): Board {
-  const board: Board = {
-    id: `board-${randomUUID().slice(0, 8)}`,
-    name,
-    createdAt: new Date().toISOString(),
-  };
-  boards.set(board.id, board);
-  return board;
-}
-
-export function newCardId(): string {
-  return `card-${randomUUID().slice(0, 8)}`;
-}
-
-export function addCard(card: Card): Card {
-  cards.set(card.id, card);
-  return card;
-}
-
-export function getCard(id: string): Card | undefined {
-  return cards.get(id);
-}
-
-export function listCards(boardId?: string): Card[] {
-  const all = [...cards.values()];
-  return boardId ? all.filter((c) => c.boardId === boardId) : all;
-}
-
-export function updateCard(id: string, patch: Partial<Card>): Card | undefined {
-  const existing = cards.get(id);
-  if (!existing) return undefined;
-  const updated: Card = {
-    ...existing,
-    ...patch,
-    id: existing.id,
-    createdAt: existing.createdAt,
-    updatedAt: new Date().toISOString(),
-  };
-  cards.set(id, updated);
-  return updated;
-}
-
-export function deleteCard(id: string): boolean {
-  return cards.delete(id);
+/**
+ * 스토어 초기화 (서버 시작 시 1회). COSMOS_ENDPOINT 가 있으면 Cosmos 로 전환.
+ * cosmos-store 는 동적 import 라 로컬/테스트에서 Azure SDK 로드가 불필요하다.
+ */
+export async function initStore(): Promise<Store> {
+  if (process.env.COSMOS_ENDPOINT) {
+    const { createCosmosStore } = await import('./cosmos-store.js');
+    activeStore = createCosmosStore();
+  } else {
+    activeStore = memoryStore;
+  }
+  await activeStore.ensureSeed();
+  return activeStore;
 }
