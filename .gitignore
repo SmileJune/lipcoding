@@ -29,3 +29,7 @@ coverage/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Playwright MCP 임시 산출물
+.playwright-mcp/
+curio-*.png
